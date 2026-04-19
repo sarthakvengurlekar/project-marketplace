@@ -4,42 +4,34 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 
-// ─── Pokémon TCG API types ───────────────────────────────────────────────────
+// ─── PokemonPriceTracker API types ────────────────────────────────────────────
 
-interface TcgPrice {
-  low?: number | null
-  mid?: number | null
-  high?: number | null
-  market?: number | null
-  directLow?: number | null
-}
-
-interface TcgPlayerPrices {
-  normal?: TcgPrice
-  holofoil?: TcgPrice
-  reverseHolofoil?: TcgPrice
-  [key: string]: TcgPrice | undefined
-}
-
-interface PokemonCard {
-  id: string
-  name: string
-  number: string
+interface PptCard {
+  tcgPlayerId?: string
+  name?: string
+  setName?: string
+  setId?: string
+  number?: string
+  cardNumber?: string
   rarity?: string
-  images: {
-    small: string
-    large: string
-  }
-  set: {
-    id: string
-    name: string
-    series: string
-  }
-  tcgplayer?: {
-    url?: string
-    prices?: TcgPlayerPrices
-  }
+  imageCdnUrl200?: string
+  imageCdnUrl400?: string
+  imageCdnUrl800?: string
+  image?: { small?: string; large?: string }
+  imageUrl?: string
+  prices?: { market?: number | null; low?: number | null; high?: number | null }
 }
+
+function getImageUrl(card: PptCard): string {
+  return card.imageCdnUrl200 ?? card.imageUrl ?? card.image?.small ?? card.image?.large ?? ''
+}
+
+interface ExchangeRates {
+  USD_INR: number
+  USD_AED: number
+}
+
+const FALLBACK_RATES: ExchangeRates = { USD_INR: 83.5, USD_AED: 3.67 }
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -63,7 +55,6 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
     info: 'bg-zinc-800 border-zinc-700 text-zinc-300',
     error: 'bg-red-500/15 border-red-500/30 text-red-400',
   }
-
   const icons = { success: '✓', info: 'ℹ', error: '✕' }
 
   return (
@@ -83,11 +74,13 @@ type AddState = 'idle' | 'loading' | 'added' | 'duplicate'
 function CardResult({
   card,
   userId,
+  rates,
   onToast,
   onCardAdded,
 }: {
-  card: PokemonCard
+  card: PptCard
   userId: string
+  rates: ExchangeRates
   onToast: (t: ToastState) => void
   onCardAdded?: () => void
 }) {
@@ -99,67 +92,81 @@ function CardResult({
 
     try {
       // 1. Upsert into public.cards
+      const cardId = String(card.tcgPlayerId ?? '')
       const { error: cardError } = await supabase.from('cards').upsert(
         {
-          id: card.id,
-          name: card.name,
-          set_name: card.set.name,
-          set_code: card.set.id,
-          card_number: card.number,
+          id: cardId,
+          name: card.name ?? '',
+          set_name: card.setName ?? null,
+          set_code: card.setId ?? card.setName ?? null,
+          card_number: card.number ?? card.cardNumber ?? null,
           rarity: card.rarity ?? null,
-          image_url: card.images.small,
+          image_url: card.imageCdnUrl200 ?? card.imageUrl ?? card.image?.small ?? null,
+          image_url_hires: card.imageCdnUrl800 ?? card.imageUrl ?? card.image?.large ?? null,
         },
         { onConflict: 'id' }
       )
-      if (cardError) throw cardError
+      if (cardError) {
+        console.error('[add-card] cards upsert error:', cardError)
+        throw cardError
+      }
 
-      // 2. Upsert price if available
-      const marketPrice = card.tcgplayer?.prices?.normal?.market ?? null
-      if (marketPrice !== null) {
+      // 2. Upsert price with INR + AED computed from exchange rates
+      const usdPrice = card.prices?.market ?? null
+      if (usdPrice != null) {
+        const inrPrice = Math.round(usdPrice * rates.USD_INR)
+        const aedPrice = Math.round(usdPrice * rates.USD_AED * 100) / 100
         const { error: priceError } = await supabase.from('card_prices').upsert(
           {
-            card_id: card.id,
-            usd_price: marketPrice,
+            card_id: cardId,
+            usd_price: usdPrice,
+            inr_price: inrPrice,
+            aed_price: aedPrice,
             last_fetched: new Date().toISOString(),
           },
           { onConflict: 'card_id' }
         )
-        if (priceError) throw priceError
+        if (priceError) {
+          console.error('[add-card] card_prices upsert error:', priceError)
+          throw priceError
+        }
       }
 
-      // 3. Check for existing user_card to give a friendlier duplicate message
+      // 3. Check for duplicate
       const { data: existing } = await supabase
         .from('user_cards')
         .select('id')
         .eq('user_id', userId)
-        .eq('card_id', card.id)
+        .eq('card_id', cardId)
         .eq('list_type', 'HAVE')
         .maybeSingle()
 
       if (existing) {
         setAddState('duplicate')
-        onToast({ type: 'info', message: `${card.name} is already in your collection.` })
+        onToast({ type: 'info', message: `${card.name ?? 'Card'} is already in your collection.` })
         return
       }
 
       // 4. Insert into user_cards
       const { error: ucError } = await supabase.from('user_cards').insert({
         user_id: userId,
-        card_id: card.id,
+        card_id: cardId,
         list_type: 'HAVE',
         added_via: 'manual',
       })
-      if (ucError) throw ucError
+      if (ucError) {
+        console.error('[add-card] user_cards insert error:', ucError)
+        throw ucError
+      }
 
       setAddState('added')
-      onToast({ type: 'success', message: `${card.name} added to your collection!` })
+      onToast({ type: 'success', message: `${card.name ?? 'Card'} added to your collection!` })
       onCardAdded?.()
     } catch (err: unknown) {
+      console.error('[add-card] unhandled error:', err)
       setAddState('idle')
-      onToast({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to add card.',
-      })
+      const msg = (err as { message?: string })?.message ?? 'Failed to add card.'
+      onToast({ type: 'error', message: msg })
     }
   }
 
@@ -169,7 +176,6 @@ function CardResult({
     added: 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 cursor-default',
     duplicate: 'bg-zinc-700 text-zinc-400 cursor-default',
   }
-
   const buttonLabel: Record<AddState, string> = {
     idle: 'Add to My Collection',
     loading: 'Adding…',
@@ -177,30 +183,39 @@ function CardResult({
     duplicate: 'Already owned',
   }
 
+  const imageUrl = getImageUrl(card)
+
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col ring-1 ring-yellow-400/5 hover:ring-yellow-400/20 transition-all">
-      {/* Card image */}
       <div className="relative w-full bg-zinc-800 aspect-[2.5/3.5] overflow-hidden">
-        <Image
-          src={card.images.small}
-          alt={card.name}
-          fill
-          sizes="(max-width: 640px) 50vw, 200px"
-          className="object-contain p-2"
-          unoptimized
-        />
+        {imageUrl ? (
+          <Image
+            src={imageUrl}
+            alt={card.name ?? ''}
+            fill
+            sizes="(max-width: 640px) 50vw, 200px"
+            className="object-contain p-2"
+            unoptimized
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <span className="text-zinc-600 text-3xl">🃏</span>
+          </div>
+        )}
       </div>
-
-      {/* Info + button */}
       <div className="p-3 flex flex-col gap-2 flex-1">
         <div className="flex-1">
-          <p className="text-white font-bold text-sm leading-tight line-clamp-1">{card.name}</p>
-          <p className="text-zinc-500 text-xs mt-0.5 line-clamp-1">{card.set.name}</p>
+          <p className="text-white font-bold text-sm leading-tight line-clamp-1">{card.name ?? '—'}</p>
+          <p className="text-zinc-500 text-xs mt-0.5 line-clamp-1">{card.setName}</p>
           {card.rarity && (
             <p className="text-yellow-500/70 text-xs mt-0.5 line-clamp-1">{card.rarity}</p>
           )}
+          {card.prices?.market != null && (
+            <p className="text-zinc-400 text-xs mt-1 font-medium">
+              ${card.prices.market.toFixed(2)}
+            </p>
+          )}
         </div>
-
         <button
           onClick={handleAdd}
           disabled={addState === 'loading' || addState === 'added' || addState === 'duplicate'}
@@ -217,18 +232,32 @@ function CardResult({
 
 export default function CardSearch({ onCardAdded }: { onCardAdded?: () => void } = {}) {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<PokemonCard[]>([])
+  const [results, setResults] = useState<PptCard[]>([])
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [rates, setRates] = useState<ExchangeRates>(FALLBACK_RATES)
   const [toast, setToast] = useState<ToastState>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
       if (user) setUserId(user.id)
-    })
+
+      const { data: rateRows } = await supabase
+        .from('exchange_rates')
+        .select('currency_pair, rate')
+        .in('currency_pair', ['USD_INR', 'USD_AED'])
+
+      if (rateRows?.length) {
+        const USD_INR = rateRows.find(r => r.currency_pair === 'USD_INR')?.rate ?? FALLBACK_RATES.USD_INR
+        const USD_AED = rateRows.find(r => r.currency_pair === 'USD_AED')?.rate ?? FALLBACK_RATES.USD_AED
+        setRates({ USD_INR, USD_AED })
+      }
+    }
+    init()
   }, [])
 
   const search = useCallback(async (term: string) => {
@@ -240,18 +269,12 @@ export default function CardSearch({ onCardAdded }: { onCardAdded?: () => void }
     setSearched(true)
 
     try {
-      const headers: HeadersInit = { 'Content-Type': 'application/json' }
-      const apiKey = process.env.NEXT_PUBLIC_POKEMON_TCG_API_KEY
-      if (apiKey) headers['X-Api-Key'] = apiKey
-
-      const res = await fetch(
-        `https://api.pokemontcg.io/v2/cards?q=name:${encodeURIComponent(trimmed)}*&orderBy=name&pageSize=30`,
-        { headers }
-      )
-
-      if (!res.ok) throw new Error(`API error ${res.status}`)
-
+      const res = await fetch(`/api/search-cards?q=${encodeURIComponent(trimmed)}`)
+      if (!res.ok) throw new Error(`Search error ${res.status}`)
       const json = await res.json()
+      if (json.data?.length > 0) {
+        console.log('[search-cards] first result structure:', JSON.stringify(json.data[0], null, 2))
+      }
       setResults(json.data ?? [])
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Search failed.')
@@ -269,7 +292,6 @@ export default function CardSearch({ onCardAdded }: { onCardAdded?: () => void }
 
   return (
     <div className="w-full">
-      {/* Search bar */}
       <div className="flex gap-2">
         <div className="relative flex-1">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 text-base select-none pointer-events-none">
@@ -298,7 +320,6 @@ export default function CardSearch({ onCardAdded }: { onCardAdded?: () => void }
         </button>
       </div>
 
-      {/* States */}
       {error && (
         <div className="mt-4 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm text-red-400">
           {error}
@@ -317,36 +338,42 @@ export default function CardSearch({ onCardAdded }: { onCardAdded?: () => void }
         </p>
       )}
 
-      {/* Results grid */}
       {results.length > 0 && (
         <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[70vh] overflow-y-auto pr-1 pb-2">
           {results.map((card) =>
             userId ? (
               <CardResult
-                key={card.id}
+                key={card.tcgPlayerId}
                 card={card}
                 userId={userId}
+                rates={rates}
                 onToast={setToast}
                 onCardAdded={onCardAdded}
               />
             ) : (
               <div
-                key={card.id}
+                key={card.tcgPlayerId ?? Math.random()}
                 className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden opacity-60"
               >
                 <div className="relative w-full aspect-[2.5/3.5] bg-zinc-800">
-                  <Image
-                    src={card.images.small}
-                    alt={card.name}
-                    fill
-                    sizes="200px"
-                    className="object-contain p-2"
-                    unoptimized
-                  />
+                  {getImageUrl(card) ? (
+                    <Image
+                      src={getImageUrl(card)}
+                      alt={card.name ?? ''}
+                      fill
+                      sizes="200px"
+                      className="object-contain p-2"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-zinc-600 text-3xl">🃏</span>
+                    </div>
+                  )}
                 </div>
                 <div className="p-3">
-                  <p className="text-white font-bold text-sm line-clamp-1">{card.name}</p>
-                  <p className="text-zinc-500 text-xs mt-0.5">{card.set.name}</p>
+                  <p className="text-white font-bold text-sm line-clamp-1">{card.name ?? '—'}</p>
+                  <p className="text-zinc-500 text-xs mt-0.5">{card.setName}</p>
                 </div>
               </div>
             )

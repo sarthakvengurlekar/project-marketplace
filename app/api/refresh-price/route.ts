@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 const EXCHANGE_STALE_MS = 24 * 60 * 60 * 1000
+const PPT_BASE = 'https://www.pokemonpricetracker.com/api/v2'
 
 // ─── Exchange rates ───────────────────────────────────────────────────────────
 
@@ -17,7 +18,6 @@ async function getExchangeRates(
   const pairs = ['USD_INR', 'USD_AED'] as const
   const now = Date.now()
 
-  // Load whatever is cached
   const { data: rows } = await supabase
     .from('exchange_rates')
     .select('currency_pair, rate, last_fetched')
@@ -33,7 +33,6 @@ async function getExchangeRates(
     return now - new Date(row.last_fetched).getTime() > EXCHANGE_STALE_MS
   })
 
-  // Fetch fresh rates for stale/missing pairs
   if (stale.length > 0 && apiKey) {
     await Promise.allSettled(
       stale.map(async (pair) => {
@@ -47,38 +46,28 @@ async function getExchangeRates(
           const json = await res.json()
           const rate: number = json.conversion_rate
           if (!rate) return
-
-          const upsertRow = {
-            currency_pair: pair,
-            rate,
-            last_fetched: new Date().toISOString(),
-          }
-          await supabase
-            .from('exchange_rates')
-            .upsert(upsertRow, { onConflict: 'currency_pair' })
-
+          const upsertRow = { currency_pair: pair, rate, last_fetched: new Date().toISOString() }
+          await supabase.from('exchange_rates').upsert(upsertRow, { onConflict: 'currency_pair' })
           cached[pair] = upsertRow
         } catch {
-          // leave cached value in place if fetch fails
+          // leave cached value in place
         }
       })
     )
   }
 
-  // Fall back to hardcoded approximate rates if still missing
   return {
     USD_INR: cached['USD_INR']?.rate ?? 83.5,
     USD_AED: cached['USD_AED']?.rate ?? 3.67,
   }
 }
 
-// ─── Card price extraction ────────────────────────────────────────────────────
+// ─── TCG API fallback price extraction ───────────────────────────────────────
 
-function extractUsdPrice(tcgplayer: Record<string, unknown> | undefined): number | null {
+function extractTcgPrice(tcgplayer: Record<string, unknown> | undefined): number | null {
   if (!tcgplayer) return null
   const prices = tcgplayer.prices as Record<string, Record<string, number>> | undefined
   if (!prices) return null
-
   const priority = ['normal', 'holofoil', 'reverseHolofoil', 'unlimited'] as const
   for (const tier of priority) {
     const market = prices[tier]?.market
@@ -95,50 +84,77 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'card_id required' }, { status: 400 })
   }
 
+  const pptKey = process.env.POKEMON_PRICE_TRACKER_API_KEY?.trim()
+  if (!pptKey) {
+    console.warn('[refresh-price] POKEMON_PRICE_TRACKER_API_KEY is not set — falling back to TCG API only')
+  }
+
   const supabase = await createSupabaseServerClient()
   const lastFetched = new Date().toISOString()
 
-  // Run exchange-rate refresh and TCG fetch concurrently
-  const [rates, tcgRes] = await Promise.all([
-    getExchangeRates(supabase),
-    fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(cardId)}`, {
-      headers: process.env.POKEMON_TCG_API_KEY?.trim()
-        ? { 'X-Api-Key': process.env.POKEMON_TCG_API_KEY.trim() }
-        : {},
-      next: { revalidate: 0 },
-    }),
-  ])
+  // ── Step 1: try PokemonPriceTracker ──────────────────────────────────────────
+  let usdPrice: number | null = null
 
-  // TCG fetch failed — upsert null prices so the row exists and the app doesn't crash
-  if (!tcgRes.ok) {
-    console.error(`[refresh-price] TCG API returned ${tcgRes.status} for card ${cardId}`)
-    await supabase.from('card_prices').upsert(
-      { card_id: cardId, usd_price: null, inr_price: null, aed_price: null, last_fetched: lastFetched },
-      { onConflict: 'card_id' }
-    )
-    return NextResponse.json({ card_id: cardId, usd_price: null, inr_price: null, aed_price: null, last_fetched: lastFetched })
+  if (pptKey) {
+    const pptUrl = `${PPT_BASE}/cards?tcgPlayerId=${encodeURIComponent(cardId)}`
+    console.log('[refresh-price] PPT URL:', pptUrl)
+    try {
+      const pptRes = await fetch(pptUrl, {
+        headers: { Authorization: `Bearer ${pptKey}` },
+        cache: 'no-store',
+      })
+      console.log('[refresh-price] PPT status:', pptRes.status)
+      if (pptRes.ok) {
+        const pptJson = await pptRes.json()
+        console.log('[refresh-price] PPT raw response:', JSON.stringify(pptJson, null, 2))
+        // API returns data as a single object, not an array
+        const market = pptJson?.data?.prices?.market
+        console.log('[refresh-price] PPT market price:', market)
+        if (typeof market === 'number' && market > 0) {
+          usdPrice = market
+        }
+      } else {
+        const errBody = await pptRes.text().catch(() => '')
+        console.warn(`[refresh-price] PPT API returned ${pptRes.status}:`, errBody)
+      }
+    } catch (err) {
+      console.warn('[refresh-price] PPT fetch error:', err)
+    }
   }
 
-  const { data: card } = await tcgRes.json()
-  const usdPrice = extractUsdPrice(card?.tcgplayer)
+  // ── Step 2: fall back to Pokemon TCG API if PPT had no price ─────────────────
+  if (usdPrice === null) {
+    const tcgKey = process.env.NEXT_PUBLIC_POKEMON_TCG_API_KEY?.trim()
+    try {
+      const tcgRes = await fetch(
+        `https://api.pokemontcg.io/v2/cards/${encodeURIComponent(cardId)}`,
+        {
+          headers: tcgKey ? { 'X-Api-Key': tcgKey } : {},
+          next: { revalidate: 0 },
+        }
+      )
+      if (tcgRes.ok) {
+        const { data: card } = await tcgRes.json()
+        usdPrice = extractTcgPrice(card?.tcgplayer)
+      } else {
+        console.warn(`[refresh-price] TCG API returned ${tcgRes.status} for ${cardId}`)
+      }
+    } catch (err) {
+      console.warn('[refresh-price] TCG fetch error:', err)
+    }
+  }
 
+  // ── Step 3: compute local prices and upsert ───────────────────────────────────
+  const rates = await getExchangeRates(supabase)
   const inrPrice = usdPrice != null ? Math.round(usdPrice * rates.USD_INR) : null
   const aedPrice = usdPrice != null ? Math.round(usdPrice * rates.USD_AED * 100) / 100 : null
 
   const { error: upsertError } = await supabase.from('card_prices').upsert(
-    {
-      card_id: cardId,
-      usd_price: usdPrice,
-      inr_price: inrPrice,
-      aed_price: aedPrice,
-      last_fetched: lastFetched,
-    },
+    { card_id: cardId, usd_price: usdPrice, inr_price: inrPrice, aed_price: aedPrice, last_fetched: lastFetched },
     { onConflict: 'card_id' }
   )
-
   if (upsertError) {
     console.error('[refresh-price] card_prices upsert error:', upsertError)
-    // Still return the prices even if DB write failed
   }
 
   return NextResponse.json({ card_id: cardId, usd_price: usdPrice, inr_price: inrPrice, aed_price: aedPrice, last_fetched: lastFetched })
