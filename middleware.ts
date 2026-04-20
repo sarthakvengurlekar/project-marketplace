@@ -1,14 +1,17 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/login', '/signup']
+const PUBLIC_PATHS    = ['/login', '/signup']          // no auth needed
+const AUTH_ONLY_PATHS = ['/onboarding']                // auth required, profile not required
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p))
+
+  const isPublic    = PUBLIC_PATHS.some(p => pathname.startsWith(p))
+  const isAuthOnly  = AUTH_ONLY_PATHS.some(p => pathname.startsWith(p))
+  const isApi       = pathname.startsWith('/api/')
 
   let supabaseResponse = NextResponse.next({ request })
-  let isAuthenticated = false
 
   try {
     const supabase = createServerClient(
@@ -30,18 +33,50 @@ export async function middleware(request: NextRequest) {
       }
     )
 
-    // Refresh session — do not add code between this and getUser()
+    // Must be first Supabase call — refreshes session cookies
     const { data: { user } } = await supabase.auth.getUser()
-    isAuthenticated = !!user
-  } catch {
-    // If Supabase is unreachable, treat as unauthenticated
-    isAuthenticated = false
-  }
 
-  if (!isAuthenticated && !isPublic) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+    // ── Not authenticated ──────────────────────────────────────────────────────
+    if (!user) {
+      if (isPublic) return supabaseResponse
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+
+    // ── Authenticated, public path (login/signup) → send to feed ──────────────
+    if (isPublic) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/feed'
+      return NextResponse.redirect(url)
+    }
+
+    // ── Authenticated, API route → skip profile check ─────────────────────────
+    if (isApi) return supabaseResponse
+
+    // ── Authenticated, onboarding → let through (profile not required yet) ────
+    if (isAuthOnly) return supabaseResponse
+
+    // ── Authenticated, protected page → verify profile exists ─────────────────
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (!profile) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/onboarding'
+      return NextResponse.redirect(url)
+    }
+
+  } catch {
+    // Supabase unreachable — only block protected pages
+    if (!isPublic) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse

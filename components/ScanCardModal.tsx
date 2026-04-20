@@ -6,26 +6,45 @@ import { supabase } from '@/lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface PokemonCard {
-  id: string
-  name: string
-  number: string
+interface PptCard {
+  tcgPlayerId?: string
+  name?: string
+  setName?: string
+  setId?: string
+  cardNumber?: string
+  number?: string
+  totalSetNumber?: number | string
   rarity?: string
-  images: { small: string; large: string }
-  set: { id: string; name: string }
-  tcgplayer?: {
-    prices?: {
-      normal?: { market?: number | null }
-      holofoil?: { market?: number | null }
-      reverseHolofoil?: { market?: number | null }
-      unlimited?: { market?: number | null }
-    }
-  }
+  imageCdnUrl400?: string
+  imageCdnUrl200?: string
+  imageUrl?: string
+  image?: { small?: string; large?: string }
+  prices?: { market?: number | null; low?: number | null; high?: number | null }
+}
+
+interface ScanResult {
+  card_name: string
+  set_name: string
+  card_number: string
+  set_code: string
+  total_cards: number
+  is_foil: boolean
 }
 
 type ScanState = 'idle' | 'identifying' | 'matched' | 'adding' | 'added' | 'error'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getImageUrl(card: PptCard): string {
+  return (
+    card.imageCdnUrl400 ??
+    card.imageCdnUrl200 ??
+    card.imageUrl ??
+    card.image?.large ??
+    card.image?.small ??
+    ''
+  )
+}
 
 function resizeToBase64(file: File, maxDim = 1024): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -48,15 +67,8 @@ function resizeToBase64(file: File, maxDim = 1024): Promise<string> {
   })
 }
 
-function extractMarketPrice(card: PokemonCard): number | null {
-  const prices = card.tcgplayer?.prices
-  return (
-    prices?.normal?.market ??
-    prices?.holofoil?.market ??
-    prices?.reverseHolofoil?.market ??
-    prices?.unlimited?.market ??
-    null
-  )
+function extractMarketPrice(card: PptCard): number | null {
+  return card.prices?.market ?? null
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -74,13 +86,15 @@ export default function ScanCardModal({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [scanState, setScanState] = useState<ScanState>('idle')
-  const [matchedCard, setMatchedCard] = useState<PokemonCard | null>(null)
+  const [matchedCard, setMatchedCard] = useState<PptCard | null>(null)
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null)
   const [isFoil, setIsFoil] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
   function reset() {
     setScanState('idle')
     setMatchedCard(null)
+    setScanResult(null)
     setIsFoil(false)
     setErrorMsg('')
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -120,8 +134,9 @@ export default function ScanCardModal({
         return
       }
 
-      const { card, is_foil } = await res.json()
+      const { card, is_foil, scan_result } = await res.json()
       setMatchedCard(card)
+      setScanResult(scan_result ?? null)
       setIsFoil(is_foil ?? false)
       setScanState('matched')
     } catch (err) {
@@ -136,15 +151,18 @@ export default function ScanCardModal({
     setScanState('adding')
 
     try {
+      const cardId = String(matchedCard.tcgPlayerId ?? '')
+      if (!cardId) throw new Error('Card has no ID')
+
       const { error: cardErr } = await supabase.from('cards').upsert(
         {
-          id: matchedCard.id,
-          name: matchedCard.name,
-          set_name: matchedCard.set.name,
-          set_code: matchedCard.set.id,
-          card_number: matchedCard.number,
-          rarity: matchedCard.rarity ?? null,
-          image_url: matchedCard.images.small,
+          id:          cardId,
+          name:        matchedCard.name ?? '',
+          set_name:    matchedCard.setName ?? null,
+          set_code:    matchedCard.setId ?? null,
+          card_number: matchedCard.cardNumber ?? matchedCard.number ?? null,
+          rarity:      matchedCard.rarity ?? null,
+          image_url:   getImageUrl(matchedCard),
         },
         { onConflict: 'id' }
       )
@@ -153,7 +171,7 @@ export default function ScanCardModal({
       const marketPrice = extractMarketPrice(matchedCard)
       if (marketPrice != null) {
         await supabase.from('card_prices').upsert(
-          { card_id: matchedCard.id, usd_price: marketPrice, last_fetched: new Date().toISOString() },
+          { card_id: cardId, usd_price: marketPrice, last_fetched: new Date().toISOString() },
           { onConflict: 'card_id' }
         )
       }
@@ -163,14 +181,14 @@ export default function ScanCardModal({
         .from('user_cards')
         .select('id')
         .eq('user_id', userId)
-        .eq('card_id', matchedCard.id)
+        .eq('card_id', cardId)
         .eq('list_type', 'HAVE')
         .maybeSingle()
 
       if (!existing) {
         const { error: ucErr } = await supabase.from('user_cards').insert({
           user_id: userId,
-          card_id: matchedCard.id,
+          card_id: cardId,
           list_type: 'HAVE',
           added_via: 'scan',
           is_foil: isFoil,
@@ -257,18 +275,36 @@ export default function ScanCardModal({
               </p>
               <div className="flex gap-4 mb-5">
                 <div className="relative w-24 flex-shrink-0 rounded-xl overflow-hidden bg-zinc-800" style={{ height: 134 }}>
-                  <Image
-                    src={matchedCard.images.small}
-                    alt={matchedCard.name}
-                    fill
-                    className="object-contain p-1"
-                    unoptimized
-                  />
+                  {getImageUrl(matchedCard) ? (
+                    <Image
+                      src={getImageUrl(matchedCard)}
+                      alt={matchedCard.name ?? 'Card'}
+                      width={96}
+                      height={134}
+                      className="object-contain p-1 w-full h-full"
+                      style={{ transform: 'none' }}
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-zinc-600 text-2xl">🃏</div>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0 pt-1">
                   <p className="text-white font-black text-base leading-tight">{matchedCard.name}</p>
-                  <p className="text-zinc-400 text-sm mt-1 line-clamp-1">{matchedCard.set.name}</p>
-                  <p className="text-zinc-500 text-xs mt-0.5">#{matchedCard.number}</p>
+                  <p className="text-zinc-400 text-sm mt-1 line-clamp-1">{matchedCard.setName}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {(matchedCard.cardNumber ?? matchedCard.number) && (
+                      <span className="text-zinc-300 text-xs font-bold">
+                        #{matchedCard.cardNumber ?? matchedCard.number}
+                      </span>
+                    )}
+                    {matchedCard.setId && (
+                      <span className="text-zinc-500 text-xs font-mono uppercase">{matchedCard.setId}</span>
+                    )}
+                  </div>
+                  {scanResult?.card_number && scanResult.card_number !== (matchedCard.cardNumber ?? matchedCard.number) && (
+                    <p className="text-amber-500/70 text-xs mt-0.5">Scanned: {scanResult.card_number}</p>
+                  )}
                   {matchedCard.rarity && (
                     <p className="text-yellow-500/70 text-xs mt-0.5">{matchedCard.rarity}</p>
                   )}

@@ -225,7 +225,7 @@ export default function BinderView({
   profileUsername: string
   isOwner: boolean
 }) {
-  const { countryCode } = useCountry()
+  const { countryCode, initialized: countryReady } = useCountry()
   const [items, setItems] = useState<CollectionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [priceLoadingIds, setPriceLoadingIds] = useState<Set<string>>(new Set())
@@ -372,7 +372,7 @@ export default function BinderView({
     // fall back to client-side conversion when pre-computed price is missing
     return sum + convertFromUSD(p?.usd_price ?? 0, countryCode)
   }, 0)
-  const pricesStillLoading = priceLoadingIds.size > 0
+  const pricesStillLoading = priceLoadingIds.size > 0 || !countryReady
 
   return (
     <main className="min-h-screen bg-zinc-950 px-4 py-8 pb-32">
@@ -494,7 +494,7 @@ export default function BinderView({
                 key={item.id}
                 item={item}
                 isOwner={isOwner}
-                priceLoading={priceLoadingIds.has(item.cards.id)}
+                priceLoading={priceLoadingIds.has(item.cards.id) || !countryReady}
                 countryCode={countryCode}
                 onDelete={handleDelete}
               />

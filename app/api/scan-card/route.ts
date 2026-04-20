@@ -2,80 +2,143 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 
 const SYSTEM_PROMPT =
-  'This is a Pokemon trading card. Look carefully at the card name printed at the top, the set symbol on the right side, and the card number at the bottom. Return ONLY a valid JSON object with these exact fields: card_name (string), set_name (string), card_number (string), is_foil (boolean, set to true if the card has a holographic or special finish). If you cannot identify the card clearly, return exactly: {"error": "unidentified"}'
+  'This is a Pokemon trading card. Look carefully at the card name at the top, and especially the bottom of the card where you will find a card number like "158/191" and a small set code like "SSP" or "sv8". Return ONLY a valid JSON object with these exact fields: card_name (string), set_name (string), card_number (string, the full number shown e.g. "158/191"), set_code (string, the small alphanumeric code at the bottom left e.g. "SSP", "sv8", "swsh1"), total_cards (number, the total after the slash e.g. 191, or 0 if unknown), is_foil (boolean, true if holographic or special finish). If you cannot identify the card clearly, return exactly: {"error": "unidentified"}'
 
 interface ScanResult {
   card_name: string
   set_name: string
   card_number: string
+  set_code: string
+  total_cards: number
   is_foil: boolean
 }
 
-interface TcgCard {
-  id: string
-  name: string
-  number: string
-  set: { id: string; name: string }
+interface PptCard {
+  tcgPlayerId?: string | number
+  name?: string
+  setName?: string
+  setId?: string | number
+  cardNumber?: string | number
+  number?: string | number
+  totalSetNumber?: number | string
+  rarity?: string
+  imageCdnUrl400?: string
+  imageCdnUrl200?: string
+  imageUrl?: string
+  prices?: { market?: number | null; low?: number | null; high?: number | null }
 }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const PPT_BASE = 'https://www.pokemonpricetracker.com/api/v2'
 
-function pickBestMatch(cards: TcgCard[], result: ScanResult): TcgCard {
-  const exact = cards.find(
-    (c) =>
-      c.number === result.card_number &&
-      c.set.name.toLowerCase().includes(result.set_name.toLowerCase().slice(0, 6))
-  )
-  return exact ?? cards[0]
+function pickBestMatch(cards: PptCard[], result: ScanResult): PptCard {
+  const scannedNum   = result.card_number.trim()
+  const scannedTotal = result.total_cards
+  const scannedName  = result.card_name.toLowerCase().trim()
+  const scannedHasEx = /\bex\b/i.test(scannedName)
+
+  let best = cards[0]
+  let bestScore = -1
+
+  for (const c of cards) {
+    const cNum   = String(c.cardNumber ?? c.number ?? '').trim()
+    const cTotal = Number(c.totalSetNumber ?? 0)
+    const cName  = (c.name ?? '').toLowerCase().trim()
+    const cHasEx = /\bex\b/i.test(cName)
+
+    let score = 0
+
+    // Exact full card number match (e.g. "158/191")
+    if (cNum === scannedNum) score += 100
+
+    // Name: penalise ex/EX when the scanned card is not ex
+    if (!scannedHasEx && !cHasEx) score += 50
+    if (!scannedHasEx && cHasEx)  score -= 50
+
+    // Total set size match
+    if (scannedTotal > 0 && cTotal === scannedTotal) score += 30
+
+    // Name contains scanned name
+    if (cName.includes(scannedName)) score += 10
+
+    if (score > bestScore) {
+      bestScore = score
+      best = c
+    }
+  }
+
+  return best
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json().catch(() => null)
-    const imageBase64: string | undefined = body?.imageBase64
+    // ── Parse request body ────────────────────────────────────────────────────
+    let body: { imageBase64?: string } | null = null
+    try {
+      body = await request.json()
+    } catch (parseErr) {
+      console.error('[scan-card] Failed to parse request body:', parseErr)
+      return NextResponse.json({ error: 'Invalid JSON body', details: String(parseErr) }, { status: 400 })
+    }
 
+    const imageBase64 = body?.imageBase64
     if (!imageBase64) {
       return NextResponse.json({ error: 'imageBase64 required' }, { status: 400 })
     }
 
-    if (!process.env.OPENAI_API_KEY) {
+    console.log('[scan-card] imageBase64 length:', imageBase64.length)
+
+    // ── Check environment variables ───────────────────────────────────────────
+    const openaiKey = process.env.OPENAI_API_KEY?.trim()
+    if (!openaiKey) {
       console.error('[scan-card] OPENAI_API_KEY is not set')
       return NextResponse.json({ error: 'OpenAI API key not configured' }, { status: 500 })
     }
 
+    const pptKey = process.env.POKEMON_PRICE_TRACKER_API_KEY?.trim()
+    if (!pptKey) {
+      console.error('[scan-card] POKEMON_PRICE_TRACKER_API_KEY is not set')
+      return NextResponse.json({ error: 'PPT API key not configured' }, { status: 500 })
+    }
+
     // ── GPT-4o vision ─────────────────────────────────────────────────────────
-    console.log('[scan-card] Sending image to GPT-4o, base64 length:', imageBase64.length)
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      max_tokens: 200,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`,
+    console.log('[scan-card] Calling GPT-4o vision...')
+    let rawContent: string
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        max_tokens: 250,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: `data:image/jpeg;base64,${imageBase64}` },
               },
-            },
-          ],
-        },
-      ],
-    })
+            ],
+          },
+        ],
+      })
+      rawContent = completion.choices[0]?.message?.content ?? ''
+      console.log('[scan-card] GPT-4o raw response:', rawContent)
+    } catch (openaiErr) {
+      console.error('[scan-card] OpenAI API error:', openaiErr)
+      return NextResponse.json(
+        { error: 'OpenAI request failed', details: String(openaiErr) },
+        { status: 500 }
+      )
+    }
 
-    const rawContent = completion.choices[0]?.message?.content ?? ''
-    console.log('[scan-card] GPT-4o raw response:', rawContent)
-
-    // Strip markdown fences GPT-4o sometimes adds
+    // ── Parse GPT-4o response ─────────────────────────────────────────────────
     const cleaned = rawContent.replace(/```json\s*|```\s*/g, '').trim()
 
     let parsed: ScanResult | { error: string }
     try {
       parsed = JSON.parse(cleaned)
-    } catch {
-      console.error('[scan-card] JSON parse failed for:', cleaned)
+    } catch (jsonErr) {
+      console.error('[scan-card] JSON parse failed:', cleaned, jsonErr)
       return NextResponse.json({ error: 'unidentified' }, { status: 404 })
     }
 
@@ -85,46 +148,62 @@ export async function POST(request: NextRequest) {
     }
 
     const result = parsed as ScanResult
-    console.log('[scan-card] Identified:', result)
+    console.log('[scan-card] Identified:', JSON.stringify(result))
 
-    // ── Pokémon TCG search ────────────────────────────────────────────────────
-    const tcgHeaders: HeadersInit = {}
-    const tcgKey = process.env.POKEMON_TCG_API_KEY?.trim()
-    if (tcgKey) tcgHeaders['X-Api-Key'] = tcgKey
+    // ── PPT search ────────────────────────────────────────────────────────────
+    const pptUrl = `${PPT_BASE}/cards?search=${encodeURIComponent(result.card_name)}&limit=20`
+    console.log('[scan-card] PPT search URL:', pptUrl)
 
-    const tcgSearch = async (query: string): Promise<TcgCard[] | null> => {
-      const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(query)}&pageSize=20`
-      console.log('[scan-card] TCG search:', url)
-      const res = await fetch(url, { headers: tcgHeaders, cache: 'no-store' })
-      if (!res.ok) {
-        console.error('[scan-card] TCG API returned', res.status, 'for query:', query)
-        return null
+    let pptData: { data?: PptCard[]; cards?: PptCard[] }
+    try {
+      const pptRes = await fetch(pptUrl, {
+        headers: { Authorization: `Bearer ${pptKey}` },
+      })
+      console.log('[scan-card] PPT response status:', pptRes.status)
+      if (!pptRes.ok) {
+        const pptBody = await pptRes.text().catch(() => '')
+        console.error('[scan-card] PPT API error body:', pptBody)
+        return NextResponse.json(
+          { error: 'PPT API error', details: `status ${pptRes.status}: ${pptBody}` },
+          { status: 502 }
+        )
       }
-      const { data } = await res.json()
-      return Array.isArray(data) && data.length > 0 ? data : null
+      pptData = await pptRes.json()
+    } catch (pptErr) {
+      console.error('[scan-card] PPT fetch error:', pptErr)
+      return NextResponse.json(
+        { error: 'PPT fetch failed', details: String(pptErr) },
+        { status: 502 }
+      )
     }
 
-    // 1. Exact quoted name
-    let cards = await tcgSearch(`name:"${result.card_name}"`)
+    const cards: PptCard[] = pptData.data ?? pptData.cards ?? []
+    console.log('[scan-card] PPT cards count:', cards.length)
 
-    // 2. Wildcard unquoted name
-    if (!cards) {
-      cards = await tcgSearch(`name:${result.card_name}*`)
-    }
-
-    if (!cards) {
-      console.log('[scan-card] No TCG cards found for:', result.card_name)
+    if (cards.length === 0) {
+      console.log('[scan-card] No PPT cards found for:', result.card_name)
       return NextResponse.json({ error: 'unidentified' }, { status: 404 })
     }
 
     const bestMatch = pickBestMatch(cards, result)
-    console.log('[scan-card] Best match:', bestMatch.name, bestMatch.set.name, bestMatch.number)
+    console.log(
+      '[scan-card] Best match:',
+      bestMatch.name,
+      '|', bestMatch.setName,
+      '| #', bestMatch.cardNumber ?? bestMatch.number,
+      '| setId:', bestMatch.setId
+    )
 
-    return NextResponse.json({ card: bestMatch, is_foil: result.is_foil })
+    return NextResponse.json({ card: bestMatch, is_foil: result.is_foil, scan_result: result })
 
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.error('[scan-card] Unhandled error:', message, err)
-    return NextResponse.json({ error: message }, { status: 500 })
+  } catch (error) {
+    console.error('[scan-card] Unhandled error:', error)
+    if (error instanceof Error) {
+      console.error('[scan-card] Stack:', error.stack)
+    }
+    return NextResponse.json(
+      { error: 'Scan failed', details: String(error) },
+      { status: 500 }
+    )
   }
 }
