@@ -14,6 +14,13 @@ import type { CardDetailResponse, HistoryPoint } from '@/app/api/card-detail/rou
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface Attack {
+  name: string
+  damage?: string
+  text?: string
+  cost?: string[]
+}
+
 interface CardRow {
   id: string
   name: string
@@ -22,6 +29,20 @@ interface CardRow {
   rarity: string | null
   image_url: string | null
   image_url_hires: string | null
+  // Rich fields
+  hp: string | null
+  stage: string | null
+  card_type: string | null
+  pokemon_type: string | null
+  energy_type: string[] | null
+  weakness: string | null
+  resistance: string | null
+  retreat_cost: string | null
+  attacks: Attack[] | null
+  flavor_text: string | null
+  artist: string | null
+  tcgplayer_url: string | null
+  external_catalog_id: string | null
 }
 
 interface UserCardRow {
@@ -102,6 +123,43 @@ function CustomTooltip({
   )
 }
 
+// ─── Card detail helpers ──────────────────────────────────────────────────────
+
+const TYPE_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+  Fire:       { bg: 'bg-red-500/15',    text: 'text-red-400',    border: 'border-red-500/30',    dot: '#ef4444' },
+  Water:      { bg: 'bg-blue-500/15',   text: 'text-blue-400',   border: 'border-blue-500/30',   dot: '#3b82f6' },
+  Grass:      { bg: 'bg-green-500/15',  text: 'text-green-400',  border: 'border-green-500/30',  dot: '#22c55e' },
+  Lightning:  { bg: 'bg-yellow-400/15', text: 'text-yellow-400', border: 'border-yellow-400/30', dot: '#eab308' },
+  Electric:   { bg: 'bg-yellow-400/15', text: 'text-yellow-400', border: 'border-yellow-400/30', dot: '#eab308' },
+  Psychic:    { bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/30', dot: '#a855f7' },
+  Fighting:   { bg: 'bg-orange-500/15', text: 'text-orange-400', border: 'border-orange-500/30', dot: '#f97316' },
+  Darkness:   { bg: 'bg-zinc-600/20',   text: 'text-zinc-300',   border: 'border-zinc-600/40',   dot: '#6b7280' },
+  Dark:       { bg: 'bg-zinc-600/20',   text: 'text-zinc-300',   border: 'border-zinc-600/40',   dot: '#6b7280' },
+  Metal:      { bg: 'bg-zinc-400/10',   text: 'text-zinc-300',   border: 'border-zinc-400/20',   dot: '#9ca3af' },
+  Dragon:     { bg: 'bg-teal-500/15',   text: 'text-teal-400',   border: 'border-teal-500/30',   dot: '#14b8a6' },
+  Colorless:  { bg: 'bg-zinc-600/15',   text: 'text-zinc-400',   border: 'border-zinc-600/30',   dot: '#71717a' },
+  Fairy:      { bg: 'bg-pink-500/15',   text: 'text-pink-400',   border: 'border-pink-500/30',   dot: '#ec4899' },
+}
+
+function TypePill({ type }: { type: string }) {
+  const c = TYPE_COLORS[type]
+  if (!c) return <span className="text-xs text-zinc-400 bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-lg">{type}</span>
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border ${c.bg} ${c.text} ${c.border}`}>
+      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.dot }} />
+      {type}
+    </span>
+  )
+}
+
+function retreatStars(cost: string | null): string {
+  if (!cost) return '—'
+  const n = parseInt(cost, 10)
+  if (isNaN(n)) return cost
+  if (n === 0) return 'Free'
+  return '★'.repeat(Math.min(n, 6))
+}
+
 // ─── Grade info tooltip ───────────────────────────────────────────────────────
 
 function GradeInfoBadge() {
@@ -136,7 +194,7 @@ export default function CardDetailPage() {
     const { data: { user } } = await supabase.auth.getUser()
 
     const [cardRes, priceRes] = await Promise.all([
-      supabase.from('cards').select('id, name, set_name, card_number, rarity, image_url, image_url_hires').eq('id', cardId).maybeSingle(),
+      supabase.from('cards').select('id, name, set_name, card_number, rarity, image_url, image_url_hires, hp, stage, card_type, pokemon_type, energy_type, weakness, resistance, retreat_cost, attacks, flavor_text, artist, tcgplayer_url, external_catalog_id').eq('id', cardId).maybeSingle(),
       supabase.from('card_prices').select('usd_price, inr_price, aed_price, last_fetched').eq('card_id', cardId).maybeSingle(),
     ])
 
@@ -292,6 +350,118 @@ export default function CardDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Card Details */}
+        {(card.hp || card.stage || card.pokemon_type || card.weakness || card.resistance ||
+          card.retreat_cost || card.artist || card.attacks?.length || card.flavor_text) && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-4 space-y-4">
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Card Details</p>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-2 gap-3">
+              {card.hp && (
+                <div>
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-wide mb-1">HP</p>
+                  <p className="text-white font-black text-lg leading-none">{card.hp}</p>
+                </div>
+              )}
+              {card.stage && (
+                <div>
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-wide mb-1">Stage</p>
+                  <span className="text-xs font-bold text-zinc-300 bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-lg">
+                    {card.stage}
+                  </span>
+                </div>
+              )}
+              {card.retreat_cost && (
+                <div>
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-wide mb-1">Retreat</p>
+                  <p className="text-yellow-400 font-black text-sm">{retreatStars(card.retreat_cost)}</p>
+                </div>
+              )}
+              {card.artist && (
+                <div>
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-wide mb-1">Artist</p>
+                  <p className="text-zinc-300 text-xs font-semibold">{card.artist}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Type + Weakness + Resistance */}
+            {(card.pokemon_type || card.energy_type?.length || card.weakness || card.resistance) && (
+              <div className="flex flex-wrap gap-2 items-center">
+                {card.pokemon_type && <TypePill type={card.pokemon_type} />}
+                {card.energy_type?.filter(t => t !== card.pokemon_type).map(t => (
+                  <TypePill key={t} type={t} />
+                ))}
+                {card.weakness && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+                    Weak: {card.weakness}
+                  </span>
+                )}
+                {card.resistance && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                    Resist: {card.resistance}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Attacks */}
+            {card.attacks && card.attacks.length > 0 && (
+              <div>
+                <p className="text-[10px] text-zinc-600 uppercase tracking-wide mb-2">Attacks</p>
+                <div className="space-y-0 divide-y divide-zinc-800">
+                  {card.attacks.map((atk, i) => (
+                    <div key={i} className="py-3 first:pt-0 last:pb-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {atk.cost && atk.cost.length > 0 && (
+                            <div className="flex gap-0.5 flex-shrink-0">
+                              {atk.cost.map((c, j) => (
+                                <span
+                                  key={j}
+                                  className="w-3 h-3 rounded-full border border-zinc-600 flex-shrink-0"
+                                  style={{ background: TYPE_COLORS[c]?.dot ?? '#6b7280' }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          <span className="text-white font-black text-sm truncate">{atk.name}</span>
+                        </div>
+                        {atk.damage && (
+                          <span className="text-yellow-400 font-black text-base flex-shrink-0 ml-2">{atk.damage}</span>
+                        )}
+                      </div>
+                      {(atk.text) && (
+                        <p className="text-zinc-400 text-xs leading-relaxed">{atk.text}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Flavor text */}
+            {card.flavor_text && (
+              <p className="text-zinc-500 text-xs italic leading-relaxed border-t border-zinc-800 pt-3">
+                &ldquo;{card.flavor_text}&rdquo;
+              </p>
+            )}
+
+            {/* TCGPlayer link */}
+            {card.tcgplayer_url && (
+              <a
+                href={card.tcgplayer_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white font-bold text-xs rounded-xl py-2.5 transition-colors"
+              >
+                View on TCGPlayer ↗
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Market price */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-4">

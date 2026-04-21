@@ -34,6 +34,9 @@ interface CollectionItem {
   created_at: string
   condition: string | null
   is_foil: boolean
+  grading_company: string | null
+  grade: number | null
+  grade_label: string | null
   cards: CardData
 }
 
@@ -44,6 +47,13 @@ const CONDITION_STYLES: Record<string, string> = {
   LP: 'bg-lime-500/20 text-lime-400 border-lime-500/30',
   MP: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   HP: 'bg-red-500/20 text-red-400 border-red-500/30',
+}
+
+const GRADE_BADGE_STYLES: Record<string, string> = {
+  PSA: 'bg-red-600 text-white',
+  BGS: 'bg-orange-600 text-white',
+  CGC: 'bg-blue-600 text-white',
+  TAG: 'bg-purple-600 text-white',
 }
 
 function timeAgo(iso: string): string {
@@ -96,17 +106,29 @@ function CardTile({
   const localPrice = countryCode === 'UAE' ? (priceData?.aed_price ?? null) : (priceData?.inr_price ?? null)
   const fetchedAt = priceData?.last_fetched ?? null
 
+  const graded = item.grading_company && item.grading_company !== 'RAW' && item.grade != null
+  const gradeDisplay = item.grade != null
+    ? (item.grade % 1 === 0 ? String(item.grade) : item.grade.toFixed(1))
+    : ''
+
   return (
     <Link
       href={`/binder/card/${item.cards.id}`}
       className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden ring-1 ring-yellow-400/5 hover:ring-yellow-400/20 transition-all group relative block"
     >
-      {/* Foil badge */}
-      {item.is_foil && (
-        <span className="absolute top-1.5 left-1.5 z-10 text-[9px] font-black px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 uppercase tracking-wide">
-          Foil
-        </span>
-      )}
+      {/* Top-left badges: grade (if graded) and/or foil */}
+      <div className="absolute top-1.5 left-1.5 z-10 flex flex-col gap-1">
+        {graded && (
+          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded shadow-md ${GRADE_BADGE_STYLES[item.grading_company!] ?? 'bg-zinc-600 text-white'}`}>
+            {item.grading_company} {gradeDisplay}
+          </span>
+        )}
+        {item.is_foil && (
+          <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 uppercase tracking-wide">
+            Foil
+          </span>
+        )}
+      </div>
 
       {/* Delete button — owner only, appears on hover */}
       {isOwner && (
@@ -189,10 +211,10 @@ function AddCardsDrawer({
         }`}
       />
       <div
-        className={`fixed bottom-0 left-0 right-0 z-50 bg-zinc-950 border-t border-zinc-800 rounded-t-3xl transition-transform duration-300 ease-out ${
+        className={`fixed bottom-0 left-0 right-0 z-[60] bg-zinc-950 border-t border-zinc-800 rounded-t-3xl transition-transform duration-300 ease-out ${
           open ? 'translate-y-0' : 'translate-y-full'
         }`}
-        style={{ maxHeight: '88vh' }}
+        style={{ maxHeight: '85vh' }}
       >
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full bg-zinc-700" />
@@ -206,7 +228,13 @@ function AddCardsDrawer({
             ✕
           </button>
         </div>
-        <div className="overflow-y-auto p-4" style={{ maxHeight: 'calc(88vh - 88px)' }}>
+        <div
+          className="overflow-y-auto p-4"
+          style={{
+            maxHeight: 'calc(85vh - 88px)',
+            paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+          }}
+        >
           <CardSearch onCardAdded={onAdded} />
         </div>
       </div>
@@ -232,9 +260,6 @@ export default function BinderView({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const refreshed = useRef<Set<string>>(new Set())
-  const [unmappedCount, setUnmappedCount] = useState(0)
-  const [migrateState, setMigrateState] = useState<'idle' | 'running' | 'done'>('idle')
-  const [migrateResult, setMigrateResult] = useState<{ matched: number; total: number } | null>(null)
 
   const fetchCollection = useCallback(async () => {
     console.log('[binder] fetchCollection — querying for user_id:', profileUserId)
@@ -250,6 +275,9 @@ export default function BinderView({
         created_at,
         condition,
         is_foil,
+        grading_company,
+        grade,
+        grade_label,
         cards (
           id, name, set_name, rarity, image_url, card_number,
           card_prices ( usd_price, inr_price, aed_price, last_fetched )
@@ -325,35 +353,11 @@ export default function BinderView({
     fetchCollection()
   }, [fetchCollection])
 
-  // After items load, check how many cards are missing a tcgplayer_id mapping
+  // Silently trigger migration in the background after items load
   useEffect(() => {
     if (!isOwner || items.length === 0) return
-    const cardIds = items.map(i => i.cards.id)
-    void (async () => {
-      try {
-        const { count } = await supabase
-          .from('cards')
-          .select('id', { count: 'exact', head: true })
-          .in('id', cardIds)
-          .is('tcgplayer_id', null)
-        setUnmappedCount(count ?? 0)
-      } catch { /* column may not exist yet */ }
-    })()
+    fetch('/api/migrate-card-ids').catch(() => {})
   }, [items, isOwner])
-
-  async function handleMigrate() {
-    setMigrateState('running')
-    try {
-      const res = await fetch('/api/migrate-card-ids')
-      if (!res.ok) throw new Error('Migration failed')
-      const { matched, total } = await res.json()
-      setMigrateResult({ matched, total })
-      setUnmappedCount(0)
-      setMigrateState('done')
-    } catch {
-      setMigrateState('idle')
-    }
-  }
 
   async function handleDelete(userCardId: string) {
     const { error } = await supabase
@@ -375,7 +379,7 @@ export default function BinderView({
   const pricesStillLoading = priceLoadingIds.size > 0 || !countryReady
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 py-8 pb-32">
+    <main className="min-h-screen bg-zinc-950 px-4 py-8 pb-48">
       <div className="max-w-lg mx-auto">
 
         {/* Header */}
@@ -422,46 +426,6 @@ export default function BinderView({
           </div>
         )}
 
-        {/* Migration banner — shown when cards are missing tcgplayer_id */}
-        {isOwner && !loading && unmappedCount > 0 && migrateState !== 'done' && (
-          <div className="bg-zinc-900 border border-yellow-400/20 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-yellow-400 text-xs font-black">
-                {unmappedCount} card{unmappedCount !== 1 ? 's' : ''} need data update
-              </p>
-              <p className="text-zinc-500 text-[11px] mt-0.5 leading-snug">
-                Enables price history &amp; PSA grades for older cards
-              </p>
-            </div>
-            <button
-              onClick={handleMigrate}
-              disabled={migrateState === 'running'}
-              className="flex-shrink-0 flex items-center gap-1.5 bg-yellow-400 hover:bg-yellow-300 disabled:opacity-60 text-black font-black text-xs rounded-xl px-4 py-2 transition-colors"
-            >
-              {migrateState === 'running' ? (
-                <>
-                  <span className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                  Updating…
-                </>
-              ) : 'Update card data'}
-            </button>
-          </div>
-        )}
-
-        {isOwner && migrateState === 'done' && migrateResult && (
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl px-4 py-3 mb-4 flex items-center justify-between gap-3">
-            <p className="text-emerald-400 text-xs font-black">
-              {migrateResult.matched}/{migrateResult.total} cards updated
-            </p>
-            <button
-              onClick={() => setMigrateState('idle')}
-              className="text-zinc-500 text-[11px] hover:text-white transition-colors"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
         {/* Grid */}
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -505,7 +469,7 @@ export default function BinderView({
 
       {/* Owner FABs */}
       {isOwner && !loading && (
-        <div className="fixed bottom-6 left-0 right-0 flex justify-center gap-3 z-30 px-4">
+        <div className="fixed bottom-24 left-0 right-0 flex justify-center gap-3 z-30 px-4">
           <button
             onClick={() => setDrawerOpen(true)}
             className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-black font-black rounded-2xl px-6 py-3.5 text-sm tracking-wide transition-colors shadow-xl shadow-yellow-400/30"

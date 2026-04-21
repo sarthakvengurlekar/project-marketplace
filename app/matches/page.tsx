@@ -205,7 +205,7 @@ export default function MatchesPage() {
   const sellingUnread = selling.some(m => m.lastMessage?.isUnread)
 
   return (
-    <main className="min-h-screen bg-zinc-950 pb-16">
+    <main className="min-h-screen bg-zinc-950 pb-28">
 
       {/* Header */}
       <div className="sticky top-0 z-20 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-900 px-4 py-3">
