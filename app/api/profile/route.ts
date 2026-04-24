@@ -44,14 +44,21 @@ export async function GET() {
 
   const cardIds = (userCardsRes.data ?? []).map((c: { card_id: string }) => c.card_id)
 
-  let collectionValueUsd = 0
+  let collectionValueLocal = 0
   if (cardIds.length > 0) {
+    const priceCol = profile.country_code === 'UAE' ? 'aed_price' : 'inr_price'
     const { data: prices } = await admin
       .from('card_prices')
-      .select('usd_price')
+      .select(`usd_price, inr_price, aed_price`)
       .in('card_id', cardIds)
-    collectionValueUsd = (prices ?? []).reduce(
-      (sum: number, p: { usd_price: number | null }) => sum + (p.usd_price ?? 0),
+    const USD_TO: Record<string, number> = { IN: 83.5, UAE: 3.67 }
+    const rate = USD_TO[profile.country_code] ?? 83.5
+    collectionValueLocal = (prices ?? []).reduce(
+      (sum: number, p: { usd_price: number | null; inr_price: number | null; aed_price: number | null }) => {
+        const local = priceCol === 'aed_price' ? p.aed_price : p.inr_price
+        if (local != null) return sum + local
+        return sum + Math.round((p.usd_price ?? 0) * rate)
+      },
       0
     )
   }
@@ -59,10 +66,10 @@ export async function GET() {
   return NextResponse.json({
     profile,
     stats: {
-      card_count:           userCardsRes.count ?? 0,
-      collection_value_usd: collectionValueUsd,
-      trade_count:          completedTradesRes.count ?? 0,
-      avg_rating:           profile.trade_rating ?? null,
+      card_count:            userCardsRes.count ?? 0,
+      collection_value_local: collectionValueLocal,
+      trade_count:           completedTradesRes.count ?? 0,
+      avg_rating:            profile.trade_rating ?? null,
     },
     preview_cards: previewCardsRes.data ?? [],
   })

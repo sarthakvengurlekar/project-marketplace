@@ -11,7 +11,7 @@ const TABS = [
   { href: '/profile', icon: '👤', label: 'Profile'    },
 ]
 
-const HIDDEN_PREFIXES = ['/login', '/signup', '/onboarding']
+const HIDDEN_PREFIXES = ['/login', '/signup', '/onboarding', '/binder/add-cards']
 
 const SPRING = 'cubic-bezier(0.34, 1.56, 0.64, 1)'
 
@@ -27,10 +27,10 @@ export default function BottomNav() {
       const res = await fetch('/api/matches-list', { cache: 'no-store' })
       if (!res.ok) return
       const data = await res.json()
-      const count = [
-        ...(data.buying  ?? []),
-        ...(data.selling ?? []),
-      ].filter((m: { lastMessage?: { isUnread: boolean } }) => m.lastMessage?.isUnread).length
+      const all = data.matches ?? [...(data.buying ?? []), ...(data.selling ?? [])]
+      const count = all.filter((m: { lastMessage?: { isUnread: boolean }; status?: string; role?: string }) =>
+        m.lastMessage?.isUnread || (m.status === 'PENDING' && m.role === 'SELLER')
+      ).length
       setUnreadCount(count)
     } catch {
       // silent

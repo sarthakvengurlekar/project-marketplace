@@ -8,49 +8,37 @@ const adminSupabase = createClient(
 )
 
 export async function GET() {
-  // Auth
   const authClient = await createSupabaseServerClient()
   const { data: { user } } = await authClient.auth.getUser()
-  console.log('[matches-list] user:', user?.id ?? 'null')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const currentUserId = user.id
 
-  // Step 1: fetch matches
+  // All matches for this user
   const { data: matches, error: matchError } = await adminSupabase
     .from('matches')
     .select('*')
     .or(`user_1_id.eq.${currentUserId},user_2_id.eq.${currentUserId}`)
     .order('created_at', { ascending: false })
-  console.log('[matches-list] matches:', matches?.length ?? 0, '| error:', matchError?.message ?? 'none')
+
+  if (matchError) console.error('[matches-list] match error:', matchError.message)
 
   if (!matches?.length) {
-    return NextResponse.json({ buying: [], selling: [], currentUserId, hasUnread: false })
+    return NextResponse.json({ matches: [], hasUnread: false, hasPendingAction: false, currentUserId })
   }
 
-  // Step 2: collect all other-user IDs, then batch-fetch their profiles
+  // Batch-fetch other users' profiles
   const otherUserIds = Array.from(new Set(
     matches.map(m => m.user_1_id === currentUserId ? m.user_2_id : m.user_1_id)
   ))
-  console.log('[matches-list] currentUserId:', currentUserId)
-  console.log('[matches-list] otherUserIds to look up:', otherUserIds)
-
-  // Diagnostic: fetch ALL profiles so we can see what IDs exist
-  const { data: allProfiles } = await adminSupabase
+  const { data: profiles } = await adminSupabase
     .from('profiles')
-    .select('id, username')
-  console.log('[matches-list] ALL profiles in DB:', allProfiles)
-
-  const { data: profiles, error: profileError } = await adminSupabase
-    .from('profiles')
-    .select('id, username, avatar_url, city, country_code')
+    .select('id, username, avatar_url, city, country_code, trade_rating')
     .in('id', otherUserIds)
-  console.log('[matches-list] profiles fetched for otherUserIds:', profiles?.length ?? 0, '| error:', profileError?.message ?? 'none')
-  console.log('[matches-list] profiles result:', JSON.stringify(profiles))
 
   const profileMap = Object.fromEntries((profiles ?? []).map(p => [p.id, p]))
 
-  // Step 3: last message per match
+  // Last message per match (with created_at for sorting)
   const matchIds = matches.map(m => m.id)
   const { data: allMessages } = await adminSupabase
     .from('messages')
@@ -58,7 +46,7 @@ export async function GET() {
     .in('match_id', matchIds)
     .order('created_at', { ascending: false })
 
-  const lastMsgMap: Record<string, { content: string; isUnread: boolean }> = {}
+  const lastMsgMap: Record<string, { content: string; created_at: string; isUnread: boolean }> = {}
   let hasUnread = false
   const seen = new Set<string>()
   for (const msg of allMessages ?? []) {
@@ -66,33 +54,26 @@ export async function GET() {
     seen.add(msg.match_id)
     const isUnread = msg.sender_id !== currentUserId && !msg.read_at
     if (isUnread) hasUnread = true
-    lastMsgMap[msg.match_id] = { content: msg.content, isUnread }
+    lastMsgMap[msg.match_id] = { content: msg.content, created_at: msg.created_at, isUnread }
   }
 
-  // Step 4: assemble
+  // Assemble unified list
   const enriched = matches.map(m => {
     const otherUserId = m.user_1_id === currentUserId ? m.user_2_id : m.user_1_id
-    const otherUser   = profileMap[otherUserId] ?? null
-    console.log(`[matches-list] match ${m.id}: otherUserId=${otherUserId} found=${!!otherUser}`)
+    const role = m.initiated_by === currentUserId ? 'BUYER' : 'SELLER'
     return {
       id:           m.id,
       status:       m.status as string,
+      role,
       initiated_by: m.initiated_by,
       created_at:   m.created_at,
-      role:         m.initiated_by === currentUserId ? 'BUYER' : 'SELLER',
-      otherUser,
+      otherUser:    profileMap[otherUserId] ?? null,
       lastMessage:  lastMsgMap[m.id] ?? null,
     }
   })
 
-  console.log('[matches-list] enriched buying:', enriched.filter(m => m.role === 'BUYER').length)
-  console.log('[matches-list] enriched selling:', enriched.filter(m => m.role === 'SELLER').length)
+  // hasPendingAction = seller has PENDING matches waiting on them
+  const hasPendingAction = enriched.some(m => m.status === 'PENDING' && m.role === 'SELLER')
 
-  return NextResponse.json({
-    buying:       enriched.filter(m => m.role === 'BUYER'),
-    selling:      enriched.filter(m => m.role === 'SELLER'),
-    hasUnread,
-    currentUserId,
-    debug: { matchCount: matches.length, profilesFound: profiles?.length ?? 0, otherUserIds },
-  })
+  return NextResponse.json({ matches: enriched, hasUnread, hasPendingAction, currentUserId })
 }

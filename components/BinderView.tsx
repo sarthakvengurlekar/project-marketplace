@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useCountry } from '@/lib/context/CountryContext'
 import { formatPrice, convertFromUSD } from '@/lib/currency'
-import CardSearch from '@/components/CardSearch'
 import ScanCardModal from '@/components/ScanCardModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -186,62 +185,6 @@ function CardTile({
   )
 }
 
-// ─── Slide-up drawer ──────────────────────────────────────────────────────────
-
-function AddCardsDrawer({
-  open,
-  onClose,
-  onAdded,
-}: {
-  open: boolean
-  onClose: () => void
-  onAdded: () => void
-}) {
-  useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : ''
-    return () => { document.body.style.overflow = '' }
-  }, [open])
-
-  return (
-    <>
-      <div
-        onClick={onClose}
-        className={`fixed inset-0 bg-black/60 z-40 transition-opacity duration-300 ${
-          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        }`}
-      />
-      <div
-        className={`fixed bottom-0 left-0 right-0 z-[60] bg-zinc-950 border-t border-zinc-800 rounded-t-3xl transition-transform duration-300 ease-out ${
-          open ? 'translate-y-0' : 'translate-y-full'
-        }`}
-        style={{ maxHeight: '85vh' }}
-      >
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="w-10 h-1 rounded-full bg-zinc-700" />
-        </div>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-          <h2 className="text-white font-black text-base tracking-tight">Add Cards</h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors text-sm"
-          >
-            ✕
-          </button>
-        </div>
-        <div
-          className="overflow-y-auto p-4"
-          style={{
-            maxHeight: 'calc(85vh - 88px)',
-            paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
-          }}
-        >
-          <CardSearch onCardAdded={onAdded} />
-        </div>
-      </div>
-    </>
-  )
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function BinderView({
@@ -257,7 +200,6 @@ export default function BinderView({
   const [items, setItems] = useState<CollectionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [priceLoadingIds, setPriceLoadingIds] = useState<Set<string>>(new Set())
-  const [drawerOpen, setDrawerOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const refreshed = useRef<Set<string>>(new Set())
 
@@ -353,11 +295,6 @@ export default function BinderView({
     fetchCollection()
   }, [fetchCollection])
 
-  // Silently trigger migration in the background after items load
-  useEffect(() => {
-    if (!isOwner || items.length === 0) return
-    fetch('/api/migrate-card-ids').catch(() => {})
-  }, [items, isOwner])
 
   async function handleDelete(userCardId: string) {
     const { error } = await supabase
@@ -443,12 +380,12 @@ export default function BinderView({
                 : `@${profileUsername} hasn't added any cards yet.`}
             </p>
             {isOwner && (
-              <button
-                onClick={() => setDrawerOpen(true)}
+              <Link
+                href="/binder/add-cards"
                 className="inline-flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black font-black rounded-xl px-5 py-2.5 text-sm transition-colors shadow-lg shadow-yellow-400/20"
               >
                 + Add Cards
-              </button>
+              </Link>
             )}
           </div>
         ) : (
@@ -470,12 +407,12 @@ export default function BinderView({
       {/* Owner FABs */}
       {isOwner && !loading && (
         <div className="fixed bottom-24 left-0 right-0 flex justify-center gap-3 z-30 px-4">
-          <button
-            onClick={() => setDrawerOpen(true)}
+          <Link
+            href="/binder/add-cards"
             className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-black font-black rounded-2xl px-6 py-3.5 text-sm tracking-wide transition-colors shadow-xl shadow-yellow-400/30"
           >
             + Add Cards
-          </button>
+          </Link>
           <button
             className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-black rounded-2xl px-6 py-3.5 text-sm tracking-wide transition-colors shadow-xl border border-zinc-700"
             onClick={() => setScanOpen(true)}
@@ -483,15 +420,6 @@ export default function BinderView({
             📷 Scan Card
           </button>
         </div>
-      )}
-
-      {/* Add Cards drawer */}
-      {isOwner && (
-        <AddCardsDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          onAdded={fetchCollection}
-        />
       )}
 
       {/* Scan Card modal */}

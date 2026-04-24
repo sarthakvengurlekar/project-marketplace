@@ -144,10 +144,38 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // ── Step 3: compute local prices and upsert ───────────────────────────────────
+  // ── Step 3: fall back to existing DB price rather than wiping it with null ────
   const rates = await getExchangeRates(supabase)
-  const inrPrice = usdPrice != null ? Math.round(usdPrice * rates.USD_INR) : null
-  const aedPrice = usdPrice != null ? Math.round(usdPrice * rates.USD_AED * 100) / 100 : null
+
+  if (usdPrice === null) {
+    // Both APIs failed — return whatever is already stored; bump last_fetched so
+    // we don't spam the APIs again for 24 h, but only if a price exists.
+    const { data: existing } = await supabase
+      .from('card_prices')
+      .select('usd_price, inr_price, aed_price')
+      .eq('card_id', cardId)
+      .maybeSingle()
+
+    if (existing?.usd_price != null) {
+      // Bump timestamp to suppress re-attempts for 24 h; keep existing values.
+      await supabase.from('card_prices').upsert(
+        { card_id: cardId, usd_price: existing.usd_price, inr_price: existing.inr_price, aed_price: existing.aed_price, last_fetched: lastFetched },
+        { onConflict: 'card_id' }
+      )
+      return NextResponse.json({ card_id: cardId, usd_price: existing.usd_price, inr_price: existing.inr_price, aed_price: existing.aed_price, last_fetched: lastFetched })
+    }
+
+    // No existing price either — store null so we stop retrying for 24 h.
+    await supabase.from('card_prices').upsert(
+      { card_id: cardId, usd_price: null, inr_price: null, aed_price: null, last_fetched: lastFetched },
+      { onConflict: 'card_id' }
+    )
+    return NextResponse.json({ card_id: cardId, usd_price: null, inr_price: null, aed_price: null, last_fetched: lastFetched })
+  }
+
+  // ── Step 4: we have a fresh price — compute local and upsert ─────────────────
+  const inrPrice = Math.round(usdPrice * rates.USD_INR)
+  const aedPrice = Math.round(usdPrice * rates.USD_AED * 100) / 100
 
   const { error: upsertError } = await supabase.from('card_prices').upsert(
     { card_id: cardId, usd_price: usdPrice, inr_price: inrPrice, aed_price: aedPrice, last_fetched: lastFetched },

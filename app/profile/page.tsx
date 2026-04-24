@@ -6,7 +6,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useCountry } from '@/lib/context/CountryContext'
-import { formatPriceFromUSD, COUNTRIES } from '@/lib/currency'
+import { formatPrice, COUNTRIES } from '@/lib/currency'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ interface Profile {
 
 interface Stats {
   card_count: number
-  collection_value_usd: number
+  collection_value_local: number
   trade_count: number
   avg_rating: number | null
 }
@@ -329,7 +329,7 @@ export default function ProfilePage() {
   const flag         = FLAGS[countryCode] ?? ''
   const isBuyer      = profile.roles?.includes('buy')
   const isSeller     = profile.roles?.includes('sell')
-  const collectionVal = formatPriceFromUSD(stats.collection_value_usd, countryCode)
+  const collectionVal = formatPrice(stats.collection_value_local, countryCode)
   const ratingDisplay = stats.avg_rating != null ? stats.avg_rating.toFixed(1) : '—'
 
   return (
