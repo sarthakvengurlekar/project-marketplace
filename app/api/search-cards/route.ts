@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
+
+const PPT_BLOCK_KEY = 'PPT_BLOCKED_UNTIL'
 
 const PPT_BASE = 'https://www.pokemonpricetracker.com/api/v2'
 const MIN_CACHE_THRESHOLD = 10
@@ -100,7 +103,7 @@ async function fetchFromPPT(
         headers: { Authorization: `Bearer ${apiKey}` },
         next: { revalidate: 0 },
       })
-      if (res.status === 429) {
+      if (res.status === 429 || res.status === 403) {
         if (attempt < RETRY_DELAYS.length - 1) continue
         return { cards: [], rateLimited: true }
       }
@@ -164,6 +167,10 @@ async function upsertToCache(admin: any, cards: PptCard[], rates: typeof FALLBAC
 }
 
 export async function GET(request: NextRequest) {
+  const authClient = await createSupabaseServerClient()
+  const { data: { user } } = await authClient.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const params = request.nextUrl.searchParams
   const q      = (params.get('search') ?? params.get('q') ?? '').trim()
   const set    = (params.get('set') ?? '').trim()
@@ -174,7 +181,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'search or set query required' }, { status: 400 })
   }
 
-  // Service-role admin client — bypasses RLS for upserts
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin: any = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -232,19 +238,39 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ cards, hasMore: dbCount >= limit, fromCache: true, rateLimited: false })
   }
 
-  // ── Layer 2: PPT API ──────────────────────────────────────────────────────
+  // ── Layer 2: PPT API (skip if blocked) ───────────────────────────────────
   const apiKey = process.env.POKEMON_PRICE_TRACKER_API_KEY?.trim()
   if (!apiKey) {
     const cachedCards = (dbRows as DbCardRow[] ?? []).map(r => mapDbCard(r))
     return NextResponse.json({ cards: cachedCards, hasMore: false, fromCache: true, rateLimited: false })
   }
 
-  // Use PPT's confirmed setName param for set searches; combine with search query if both are present
+  const { data: blockRow } = await admin
+    .from('exchange_rates')
+    .select('rate')
+    .eq('currency_pair', PPT_BLOCK_KEY)
+    .maybeSingle()
+  const pptBlocked = Date.now() < (blockRow?.rate ?? 0)
+
+  if (pptBlocked) {
+    const cachedCards = (dbRows as DbCardRow[] ?? []).map(r => mapDbCard(r))
+    return NextResponse.json({ cards: cachedCards, hasMore: false, fromCache: true, rateLimited: true })
+  }
+
   const pptParams: Record<string, string> = set
     ? { setName: set, ...(q.trim() ? { search: q.trim() } : {}) }
     : { search: q }
 
   const { cards: pptCards, rateLimited } = await fetchFromPPT(pptParams, apiKey, limit)
+
+  // If rate limited, store the block
+  if (rateLimited) {
+    const blockedUntil = Date.now() + 60 * 60 * 1000 // 1 hour default
+    await admin.from('exchange_rates').upsert(
+      { currency_pair: PPT_BLOCK_KEY, rate: blockedUntil, last_fetched: new Date().toISOString() },
+      { onConflict: 'currency_pair' }
+    ).catch(() => {})
+  }
   const filteredCards = pptCards
 
   // ── Layer 3: Background upsert ────────────────────────────────────────────

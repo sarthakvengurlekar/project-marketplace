@@ -8,14 +8,18 @@ const adminSupabase = createClient(
 )
 
 export async function POST(request: NextRequest) {
-  // Auth
   const authClient = await createSupabaseServerClient()
   const { data: { user } } = await authClient.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { match_id, content } = await request.json() as { match_id: string; content: string }
+  let body: { match_id?: string; content?: string }
+  try { body = await request.json() } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const { match_id, content } = body
   if (!match_id || !content?.trim()) {
-    return NextResponse.json({ error: 'match_id and content required' }, { status: 400 })
+    return NextResponse.json({ error: 'match_id and content are required' }, { status: 400 })
   }
 
   // Verify caller is in this match and match is open
@@ -30,9 +34,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   if (match.status === 'DECLINED' || match.status === 'COMPLETED') {
-    return NextResponse.json({ error: 'Chat is closed' }, { status: 403 })
+    return NextResponse.json({ error: 'Chat is closed' }, { status: 409 })
   }
-  // Seller cannot send until they accept
   const sellerId = match.user_1_id === match.initiated_by ? match.user_2_id : match.user_1_id
   if (user.id === sellerId && match.status === 'PENDING') {
     return NextResponse.json({ error: 'Accept the request to start chatting' }, { status: 403 })
@@ -45,9 +48,9 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) {
-    console.error('[send-message] error:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('[send-message] insert error:', error.code, error.message)
+    return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
   }
 
-  return NextResponse.json({ message })
+  return NextResponse.json({ message }, { status: 201 })
 }

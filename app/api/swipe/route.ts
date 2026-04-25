@@ -8,53 +8,61 @@ const admin = createClient(
 )
 
 export async function POST(request: NextRequest) {
-  // ── Auth: get current user from cookie session ─────────────────────────────
   const supabase = await createSupabaseServerClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  console.log('[swipe] auth user:', user?.id ?? 'null', '| authError:', authError?.message ?? 'none')
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await request.json() as { swiped_id: string }
-  const { swiped_id } = body
-  console.log('[swipe] swiper_id:', user.id, '| swiped_id:', swiped_id)
-
-  // ── Step 1: insert swipe (auth client so auth.uid() = swiper_id for RLS) ───
-  const { data: swipeData, error: swipeError } = await supabase
-    .from('swipes')
-    .insert({ swiper_id: user.id, swiped_id, direction: 'LIKE' })
-    .select()
-    .maybeSingle()
-  console.log('[swipe] insert result:', swipeData, '| error:', swipeError?.message ?? 'none')
-
-  if (swipeError) {
-    return NextResponse.json({ error: swipeError.message }, { status: 500 })
+  let body: { swiped_id?: string }
+  try { body = await request.json() } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  // ── Step 2: check if a match already exists (trigger may have created it) ──
+  const { swiped_id } = body
+  if (!swiped_id || typeof swiped_id !== 'string') {
+    return NextResponse.json({ error: 'swiped_id is required' }, { status: 400 })
+  }
+  if (swiped_id === user.id) {
+    return NextResponse.json({ error: 'Cannot swipe yourself' }, { status: 400 })
+  }
+
+  // Insert swipe — auth client so auth.uid() = swiper for RLS
+  const { error: swipeError } = await supabase
+    .from('swipes')
+    .insert({ swiper_id: user.id, swiped_id, direction: 'LIKE' })
+
+  if (swipeError) {
+    // Unique constraint violation = already swiped
+    if (swipeError.code === '23505') {
+      return NextResponse.json({ error: 'Already swiped this user' }, { status: 409 })
+    }
+    console.error('[swipe] insert error:', swipeError.code, swipeError.message)
+    return NextResponse.json({ error: 'Failed to record swipe' }, { status: 500 })
+  }
+
+  // Check for existing match
   const user1 = user.id < swiped_id ? user.id : swiped_id
   const user2 = user.id < swiped_id ? swiped_id : user.id
 
-  const { data: existingMatch, error: existingErr } = await admin
+  const { data: existingMatch } = await admin
     .from('matches')
     .select('id')
     .eq('user_1_id', user1)
     .eq('user_2_id', user2)
     .maybeSingle()
-  console.log('[swipe] existing match:', existingMatch, '| error:', existingErr?.message ?? 'none')
 
   let matchId: string | null = existingMatch?.id ?? null
 
-  // ── Step 3: no match yet → create one manually ─────────────────────────────
   if (!matchId) {
     const { data: newMatch, error: matchError } = await admin
       .from('matches')
       .insert({ user_1_id: user1, user_2_id: user2, initiated_by: user.id, status: 'PENDING' })
       .select('id')
       .maybeSingle()
-    console.log('[swipe] created match:', newMatch, '| error:', matchError?.message ?? 'none')
+    if (matchError) {
+      console.error('[swipe] match create error:', matchError.code, matchError.message)
+    }
     matchId = newMatch?.id ?? null
   }
 
-  console.log('[swipe] final matchId:', matchId)
-  return NextResponse.json({ success: true, matchId })
+  return NextResponse.json({ success: true, matchId }, { status: 201 })
 }

@@ -40,10 +40,6 @@ export async function GET(request: NextRequest) {
   const role     = match.initiated_by === currentUserId ? 'BUYER' : 'SELLER'
   console.log('[match-detail] currentUserId:', currentUserId, '| otherId:', otherId, '| sellerId:', sellerId, '| role:', role)
 
-  // Diagnostic: dump all profiles to confirm IDs
-  const { data: allProfiles } = await adminSupabase.from('profiles').select('id, username')
-  console.log('[match-detail] ALL profiles in DB:', allProfiles)
-
   // Step 2: fetch other user profile
   const { data: otherUser, error: profileError } = await adminSupabase
     .from('profiles')

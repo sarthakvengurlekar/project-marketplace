@@ -8,100 +8,89 @@ const adminSupabase = createClient(
 )
 
 export async function GET() {
-  // Step 1: get current user from cookie session
   const authClient = await createSupabaseServerClient()
   const { data: { user } } = await authClient.auth.getUser()
-  console.log('[feed-sellers] user:', user?.id ?? 'null')
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const currentUserId = user.id
 
-  // Step 2: get user's country for default filter
+  // User's country for default filter
   const { data: myProfile } = await adminSupabase
     .from('profiles')
     .select('country_code')
     .eq('id', currentUserId)
     .maybeSingle()
-  console.log('[feed-sellers] myProfile:', myProfile)
   const defaultFilter = myProfile?.country_code?.toUpperCase() ?? 'IN'
 
-  // Step 3: get all HAVE card user_ids (excluding self)
-  const { data: userCards, error: userCardsError } = await adminSupabase
+  // All HAVE card user_ids (excluding self)
+  const { data: userCards } = await adminSupabase
     .from('user_cards')
     .select('user_id')
     .eq('list_type', 'HAVE')
     .neq('user_id', currentUserId)
-  console.log('[feed-sellers] user_cards result:', userCards, userCardsError)
 
   const uniqueSellerIds = Array.from(new Set((userCards ?? []).map(r => r.user_id as string)))
-  console.log('[feed-sellers] uniqueSellerIds:', uniqueSellerIds)
 
   if (uniqueSellerIds.length === 0) {
-    return NextResponse.json({
-      sellers: [],
-      currentUserId,
-      defaultFilter,
-      debug: { userCardsCount: 0, profilesCount: 0 },
-    })
+    return NextResponse.json({ sellers: [], currentUserId, defaultFilter })
   }
 
-  // Step 4: get profiles for those seller ids
-  const { data: profiles, error: profileError } = await adminSupabase
-    .from('profiles')
-    .select('id, username, avatar_url, city, country_code')
-    .in('id', uniqueSellerIds)
-  console.log('[feed-sellers] profiles result:', profiles, profileError)
-
-  // Step 5: get already-swiped ids
-  const { data: swipesData, error: swipesError } = await adminSupabase
+  // Already-swiped ids
+  const { data: swipesData } = await adminSupabase
     .from('swipes')
     .select('target_user_id')
     .eq('swiper_user_id', currentUserId)
-  console.log('[feed-sellers] swipes result:', swipesData, swipesError)
   const swipedSet = new Set((swipesData ?? []).map(r => r.target_user_id as string))
 
-  // Step 6: for each profile, fetch their top 8 HAVE cards with card images
-  const sellers = []
-  for (const profile of profiles ?? []) {
-    if (swipedSet.has(profile.id)) continue
-
-    const { data: cards, error: cardsError } = await adminSupabase
-      .from('user_cards')
-      .select('*, cards(*)')
-      .eq('user_id', profile.id)
-      .eq('list_type', 'HAVE')
-      .limit(8)
-    console.log(`[feed-sellers] cards for ${profile.username}:`, cards?.length ?? 0, cardsError)
-
-    sellers.push({
-      id:           profile.id,
-      username:     profile.username,
-      avatar_url:   profile.avatar_url  ?? null,
-      city:         profile.city        ?? null,
-      country_code: profile.country_code,
-      trade_rating: null,
-      card_count:   uniqueSellerIds.includes(profile.id)
-        ? (userCards ?? []).filter(r => r.user_id === profile.id).length
-        : 0,
-      preview_cards: (cards ?? []).map(c => ({
-        id:        c.id,
-        condition: c.condition ?? null,
-        is_foil:   c.is_foil ?? false,
-        cards:     c.cards ?? null,
-      })),
-    })
+  // Unswiped seller ids
+  const unseenIds = uniqueSellerIds.filter(id => !swipedSet.has(id))
+  if (unseenIds.length === 0) {
+    return NextResponse.json({ sellers: [], currentUserId, defaultFilter })
   }
 
-  console.log('[feed-sellers] final sellers count:', sellers.length)
+  // Profiles + preview cards in two queries (no N+1 loop)
+  const [profilesRes, cardsRes] = await Promise.all([
+    adminSupabase
+      .from('profiles')
+      .select('id, username, avatar_url, city, country_code, trade_rating')
+      .in('id', unseenIds),
+    adminSupabase
+      .from('user_cards')
+      .select('user_id, id, condition, is_foil, cards(id, name, image_url)')
+      .in('user_id', unseenIds)
+      .eq('list_type', 'HAVE')
+      .order('created_at', { ascending: false }),
+  ])
 
-  return NextResponse.json({
-    sellers,
-    currentUserId,
-    defaultFilter,
-    debug: {
-      userCardsCount:  userCards?.length  ?? 0,
-      profilesCount:   profiles?.length   ?? 0,
-      sellersReturned: sellers.length,
-    },
-  })
+  // Group cards by seller
+  const cardsByUser: Record<string, typeof cardsRes.data> = {}
+  for (const card of cardsRes.data ?? []) {
+    const uid = card.user_id as string
+    if (!cardsByUser[uid]) cardsByUser[uid] = []
+    cardsByUser[uid]!.push(card)
+  }
+
+  // Card count by seller (from original userCards list)
+  const countByUser: Record<string, number> = {}
+  for (const row of userCards ?? []) {
+    countByUser[row.user_id as string] = (countByUser[row.user_id as string] ?? 0) + 1
+  }
+
+  const sellers = (profilesRes.data ?? []).map(profile => ({
+    id:           profile.id,
+    username:     profile.username,
+    avatar_url:   profile.avatar_url  ?? null,
+    city:         profile.city        ?? null,
+    country_code: profile.country_code,
+    trade_rating: profile.trade_rating ?? null,
+    card_count:   countByUser[profile.id] ?? 0,
+    preview_cards: (cardsByUser[profile.id] ?? []).slice(0, 8).map(c => ({
+      id:        c.id,
+      condition: c.condition ?? null,
+      is_foil:   c.is_foil ?? false,
+      cards:     c.cards ?? null,
+    })),
+  }))
+
+  return NextResponse.json({ sellers, currentUserId, defaultFilter })
 }

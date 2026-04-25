@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
+
+const PPT_BLOCK_KEY = 'PPT_BLOCKED_UNTIL'
 
 const PPT_BASE = 'https://www.pokemonpricetracker.com/api/v2'
 const FALLBACK_RATES = { USD_INR: 83.5, USD_AED: 3.67 }
@@ -127,12 +130,15 @@ async function upsertToCache(admin: any, cards: PptCard[], rates: typeof FALLBAC
 }
 
 export async function GET(request: NextRequest) {
+  const authClient = await createSupabaseServerClient()
+  const { data: { user } } = await authClient.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const offset = Math.max(0, parseInt(request.nextUrl.searchParams.get('offset') ?? '0'))
   const limit  = Math.min(100, Math.max(1, parseInt(request.nextUrl.searchParams.get('limit') ?? '60')))
 
   const apiKey = process.env.POKEMON_PRICE_TRACKER_API_KEY?.trim()
 
-  // Service-role admin client — bypasses RLS for upserts
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin: any = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -147,25 +153,44 @@ export async function GET(request: NextRequest) {
     .in('currency_pair', ['USD_INR', 'USD_AED'])
   for (const r of rateRows ?? []) rates[r.currency_pair as keyof typeof rates] = r.rate
 
-  // ── Try PPT price-sorted browse ───────────────────────────────────────────
+  // ── Try PPT price-sorted browse (skip if blocked) ─────────────────────────
   if (apiKey) {
-    try {
-      const pptUrl = `${PPT_BASE}/cards?sortBy=price&sortOrder=desc&lightweight=true&limit=${limit}`
-        + (offset > 0 ? `&offset=${offset}` : '')
-      const res = await fetch(pptUrl, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        next: { revalidate: 0 },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const arr: PptCard[] = Array.isArray(data) ? data : (data.data ?? data.cards ?? [])
-        if (arr.length > 0) {
-          upsertToCache(admin, arr, rates).catch(() => {})
-          return NextResponse.json({ cards: arr, hasMore: arr.length >= limit, source: 'ppt' })
+    const { data: blockRow } = await admin
+      .from('exchange_rates')
+      .select('rate')
+      .eq('currency_pair', PPT_BLOCK_KEY)
+      .maybeSingle()
+    const pptBlocked = Date.now() < (blockRow?.rate ?? 0)
+
+    if (!pptBlocked) {
+      try {
+        const pptUrl = `${PPT_BASE}/cards?sortBy=price&sortOrder=desc&lightweight=true&limit=${limit}`
+          + (offset > 0 ? `&offset=${offset}` : '')
+        const res = await fetch(pptUrl, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          next: { revalidate: 0 },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const arr: PptCard[] = Array.isArray(data) ? data : (data.data ?? data.cards ?? [])
+          if (arr.length > 0) {
+            upsertToCache(admin, arr, rates).catch(() => {})
+            return NextResponse.json({ cards: arr, hasMore: arr.length >= limit, source: 'ppt' })
+          }
+        } else if (res.status === 403 || res.status === 429) {
+          let retryAfterSec = 3600
+          try {
+            const body = await res.json()
+            if (typeof body?.retryAfter === 'number' && body.retryAfter > 0) retryAfterSec = body.retryAfter
+          } catch { /* ignore */ }
+          const blockedUntil = Date.now() + Math.max(retryAfterSec * 1000, 10 * 60 * 1000)
+          await admin.from('exchange_rates').upsert(
+            { currency_pair: PPT_BLOCK_KEY, rate: blockedUntil, last_fetched: new Date().toISOString() },
+            { onConflict: 'currency_pair' }
+          )
+          console.warn(`[browse-cards] PPT blocked (${res.status}) — stored cooldown for ${Math.round((blockedUntil - Date.now()) / 60_000)} min`)
         }
-      }
-    } catch {
-      // fall through to DB
+      } catch { /* fall through to DB */ }
     }
   }
 

@@ -96,6 +96,10 @@ export async function PATCH(
   const sellerId = match.user_1_id === match.initiated_by ? match.user_2_id : match.user_1_id
   if (user.id !== sellerId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  await admin.from('matches').update({ status }).eq('id', id)
-  return NextResponse.json({ success: true })
+  const { error: updateError } = await admin.from('matches').update({ status }).eq('id', id)
+  if (updateError) {
+    console.error('[matches PATCH] update error:', updateError.code, updateError.message)
+    return NextResponse.json({ error: 'Failed to update match' }, { status: 500 })
+  }
+  return new NextResponse(null, { status: 204 })
 }

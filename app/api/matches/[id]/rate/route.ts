@@ -38,7 +38,10 @@ export async function POST(
     .from('ratings')
     .insert({ match_id: id, rater_id: user.id, rated_id: ratedId, stars, comment: comment ?? null })
 
-  if (ratingError) return NextResponse.json({ error: ratingError.message }, { status: 500 })
+  if (ratingError) {
+    console.error('[rate] insert error:', ratingError.code, ratingError.message)
+    return NextResponse.json({ error: 'Failed to submit rating' }, { status: 500 })
+  }
 
   // Recompute average trade_rating for the rated user
   const { data: allRatings } = await admin
