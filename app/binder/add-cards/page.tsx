@@ -75,12 +75,12 @@ function sortCards(cards: PptCard[]): PptCard[] {
 
 function ShimmerTile() {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden animate-pulse">
-      <div className="w-full aspect-[2.5/3.5] bg-zinc-800" />
+    <div className="rounded-2xl overflow-hidden animate-pulse" style={{ background: 'linear-gradient(160deg, #1e1030, #160e20)', border: '1px solid rgba(139,92,246,0.2)' }}>
+      <div className="w-full aspect-[2.5/3.5]" style={{ background: '#2a1f3a' }} />
       <div className="p-2.5 space-y-2">
-        <div className="h-3 bg-zinc-800 rounded w-3/4" />
-        <div className="h-2.5 bg-zinc-800 rounded w-1/2" />
-        <div className="h-4 bg-zinc-800 rounded w-2/3 mt-1" />
+        <div className="h-3 rounded w-3/4" style={{ background: '#2a1f3a' }} />
+        <div className="h-2.5 rounded w-1/2" style={{ background: '#2a1f3a' }} />
+        <div className="h-4 rounded w-2/3 mt-1" style={{ background: '#2a1f3a' }} />
       </div>
     </div>
   )
@@ -101,7 +101,7 @@ function AddCardTile({
   const localPrice = usdPrice != null ? formatPriceFromUSD(usdPrice, countryCode) : null
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden ring-1 ring-yellow-400/5 relative group">
+    <div className="holo-card rounded-2xl overflow-hidden relative group" style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}>
 
       {/* + Add button */}
       <button
@@ -128,7 +128,7 @@ function AddCardTile({
       </button>
 
       {/* Card image */}
-      <div className="relative w-full aspect-[2.5/3.5] bg-zinc-800 overflow-hidden">
+      <div className="relative w-full aspect-[2.5/3.5] overflow-hidden" style={{ background: '#1a1028' }}>
         {imageUrl ? (
           <Image
             src={imageUrl}
@@ -139,7 +139,7 @@ function AddCardTile({
             unoptimized
           />
         ) : (
-          <div className="absolute inset-0 bg-zinc-800 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#1a1028' }}>
             <span className="text-xl opacity-20">🃏</span>
           </div>
         )}
@@ -149,11 +149,11 @@ function AddCardTile({
       <div className="p-2.5 space-y-1">
         <p className="text-white font-bold text-xs leading-tight line-clamp-1">{card.name ?? '—'}</p>
         <p className="text-zinc-500 text-[11px] line-clamp-1">{card.setName ?? '—'}</p>
-        <span className="inline-block text-[9px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wide bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-          NM
+        <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wide bg-teal-500/20 text-teal-400 border-teal-500/40 badge-nm">
+          ★ NM
         </span>
         {localPrice ? (
-          <p className="text-yellow-400 font-black text-xs">{localPrice}</p>
+          <p className="font-black text-xs text-gradient-pika">{localPrice}</p>
         ) : (
           <p className="text-zinc-600 text-[10px]">Price unavailable</p>
         )}
@@ -194,7 +194,7 @@ function GradingDrawer({ card, open, adding, onClose, onConfirm }: {
       <div
         style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 60,
-          background: '#09090b', borderTop: '1px solid #27272a',
+          background: '#0f0a1a', borderTop: '1px solid rgba(139,92,246,0.25)',
           borderRadius: '24px 24px 0 0', maxHeight: '92vh',
           transform: open ? 'translateY(0)' : 'translateY(100%)',
           transition: 'transform 0.3s ease-out',
@@ -230,7 +230,8 @@ function GradingDrawer({ card, open, adding, onClose, onConfirm }: {
             disabled={adding}
             style={{
               width: '100%', marginTop: 24,
-              background: adding ? 'rgba(234,179,8,0.5)' : '#eab308',
+              background: adding ? 'rgba(255,222,0,0.4)' : 'linear-gradient(135deg, #FFDE00, #F4C430)',
+              boxShadow: adding ? 'none' : '0 0 16px rgba(255,222,0,0.35)',
               color: '#000', fontWeight: 900, fontSize: 14,
               border: 'none', borderRadius: 14, padding: '14px 0',
               cursor: adding ? 'not-allowed' : 'pointer',
@@ -517,13 +518,13 @@ export default function AddCardsPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <main style={{ minHeight: '100vh', background: '#09090b', paddingBottom: 48 }}>
+    <main style={{ minHeight: '100vh', background: '#0a0514', paddingBottom: 48 }}>
 
       {/* ── Sticky header ──────────────────────────────────────────────────── */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
-        background: 'rgba(9,9,11,0.97)',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(10,5,20,0.97)',
+        borderBottom: '1px solid rgba(139,92,246,0.2)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
       }}>
@@ -560,8 +561,8 @@ export default function AddCardsPage() {
               placeholder={activeSet ? `Searching in ${activeSet}…` : 'Search by name, set or number…'}
               style={{
                 width: '100%', boxSizing: 'border-box',
-                background: '#18181b',
-                border: `1.5px solid ${inputFocused || query || activeSet ? 'rgba(234,179,8,0.65)' : 'rgba(255,255,255,0.08)'}`,
+                background: '#1e1628',
+                border: `1.5px solid ${inputFocused || query || activeSet ? 'rgba(255,222,0,0.65)' : 'rgba(139,92,246,0.25)'}`,
                 borderRadius: 12, padding: '10px 36px 10px 34px',
                 color: '#fff', fontSize: 14, outline: 'none',
                 transition: 'border-color 0.2s',
@@ -607,9 +608,10 @@ export default function AddCardsPage() {
                     onClick={() => isActive ? setActiveSet(null) : (setActiveSet(s.name), setQuery(''))}
                     style={{
                       flexShrink: 0,
-                      background: isActive ? '#eab308' : '#18181b',
-                      border: `1px solid ${isActive ? '#eab308' : 'rgba(255,255,255,0.12)'}`,
+                      background: isActive ? 'linear-gradient(135deg, #FFDE00, #F4C430)' : 'rgba(30,22,40,0.8)',
+                      border: `1px solid ${isActive ? '#FFDE00' : 'rgba(139,92,246,0.3)'}`,
                       color: isActive ? '#000' : '#d4d4d8',
+                      boxShadow: isActive ? '0 0 12px rgba(255,222,0,0.4)' : 'none',
                       fontSize: 12, fontWeight: isActive ? 800 : 600,
                       padding: '5px 13px', borderRadius: 20, cursor: 'pointer',
                       whiteSpace: 'nowrap', transition: 'all 0.15s',
@@ -668,7 +670,7 @@ export default function AddCardsPage() {
             onClick={() => isSearch ? fetchSearch(query, activeSet, offsetRef.current) : fetchBrowse(offsetRef.current)}
             style={{
               display: 'block', width: '100%', marginTop: 14,
-              background: '#18181b', border: '1px solid rgba(255,255,255,0.1)',
+              background: '#1e1628', border: '1px solid rgba(139,92,246,0.25)',
               color: '#a1a1aa', fontWeight: 600, fontSize: 13,
               borderRadius: 12, padding: '12px 0', cursor: 'pointer',
             }}

@@ -42,17 +42,21 @@ interface CollectionItem {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const CONDITION_STYLES: Record<string, string> = {
-  NM: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  LP: 'bg-lime-500/20 text-lime-400 border-lime-500/30',
-  MP: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-  HP: 'bg-red-500/20 text-red-400 border-red-500/30',
+  NM: 'bg-teal-500/20 text-teal-400 border-teal-500/40 badge-nm',
+  LP: 'bg-blue-500/20 text-blue-400 border-blue-500/40 badge-lp',
+  MP: 'bg-orange-500/20 text-orange-400 border-orange-500/40 badge-mp',
+  HP: 'bg-red-500/20 text-red-400 border-red-500/40 badge-hp',
+}
+
+const CONDITION_ICONS: Record<string, string> = {
+  NM: '★', LP: '✓', MP: '△', HP: '✕',
 }
 
 const GRADE_BADGE_STYLES: Record<string, string> = {
-  PSA: 'bg-red-600 text-white',
-  BGS: 'bg-orange-600 text-white',
-  CGC: 'bg-blue-600 text-white',
-  TAG: 'bg-purple-600 text-white',
+  PSA: 'bg-red-600 text-white glow-psa',
+  BGS: 'bg-yellow-600 text-white glow-bgs',
+  CGC: 'bg-blue-600 text-white glow-cgc',
+  TAG: 'bg-purple-600 text-white glow-tag',
 }
 
 function timeAgo(iso: string): string {
@@ -72,12 +76,15 @@ function isStale(fetchedAt: string | null): boolean {
 
 function SkeletonTile() {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden animate-pulse">
-      <div className="w-full aspect-[2.5/3.5] bg-zinc-800" />
+    <div
+      className="rounded-2xl overflow-hidden animate-pulse"
+      style={{ background: 'linear-gradient(160deg, #1e1030, #160e20)', border: '1px solid rgba(139,92,246,0.2)' }}
+    >
+      <div className="w-full aspect-[2.5/3.5]" style={{ background: '#2a1f3a' }} />
       <div className="p-2.5 space-y-2">
-        <div className="h-3 bg-zinc-800 rounded w-3/4" />
-        <div className="h-2.5 bg-zinc-800 rounded w-1/2" />
-        <div className="h-4 bg-zinc-800 rounded w-2/3 mt-1" />
+        <div className="h-3 rounded w-3/4" style={{ background: '#2a1f3a' }} />
+        <div className="h-2.5 rounded w-1/2" style={{ background: '#2a1f3a' }} />
+        <div className="h-4 rounded w-2/3 mt-1" style={{ background: '#2a1f3a' }} />
       </div>
     </div>
   )
@@ -113,7 +120,8 @@ function CardTile({
   return (
     <Link
       href={`/binder/card/${item.cards.id}`}
-      className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden ring-1 ring-yellow-400/5 hover:ring-yellow-400/20 transition-all group relative block"
+      className="holo-card rounded-2xl overflow-hidden group relative block"
+      style={{ background: 'linear-gradient(160deg, #1e1030, #160e20)', border: '1px solid rgba(139,92,246,0.25)' }}
     >
       {/* Top-left badges: grade (if graded) and/or foil */}
       <div className="absolute top-1.5 left-1.5 z-10 flex flex-col gap-1">
@@ -123,8 +131,8 @@ function CardTile({
           </span>
         )}
         {item.is_foil && (
-          <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 uppercase tracking-wide">
-            Foil
+          <span className="foil-badge text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide">
+            ✦ Foil
           </span>
         )}
       </div>
@@ -141,7 +149,7 @@ function CardTile({
       )}
 
       {/* Card image */}
-      <div className="relative w-full aspect-[2.5/3.5] bg-zinc-800 overflow-hidden">
+      <div className="relative w-full aspect-[2.5/3.5] overflow-hidden" style={{ background: '#1a1028' }}>
         <Image
           src={item.cards.image_url}
           alt={item.cards.name}
@@ -158,8 +166,8 @@ function CardTile({
         <p className="text-zinc-500 text-[11px] line-clamp-1">{item.cards.set_name}</p>
 
         {/* Condition badge */}
-        <span className={`inline-block text-[9px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wide ${condStyle}`}>
-          {condition}
+        <span className={`inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wide ${condStyle}`}>
+          <span>{CONDITION_ICONS[condition] ?? ''}</span>{condition}
         </span>
 
         {/* Price */}
@@ -167,7 +175,7 @@ function CardTile({
           <div className="h-3.5 w-3/4 bg-zinc-800 rounded animate-pulse mt-1" />
         ) : usdPrice != null ? (
           <>
-            <p className="text-yellow-400 font-black text-xs">
+            <p className="font-black text-xs text-gradient-pika">
               {formatPrice(
                 localPrice ?? convertFromUSD(usdPrice!, countryCode),
                 countryCode
@@ -205,9 +213,6 @@ export default function BinderView({
 
   const fetchCollection = useCallback(async () => {
     console.log('[binder] fetchCollection — querying for user_id:', profileUserId)
-
-    // Clear so newly-added cards get price-refreshed on re-fetch
-    refreshed.current.clear()
 
     const { data, error } = await supabase
       .from('user_cards')
@@ -256,39 +261,46 @@ export default function BinderView({
     const staleIds = new Set(toRefresh.map(i => i.cards.id))
     setPriceLoadingIds(staleIds)
 
-    await Promise.allSettled(
-      toRefresh.map(async (item) => {
-        const cid = item.cards.id
-        if (refreshed.current.has(cid)) return
-        refreshed.current.add(cid)
+    // Process in small batches to avoid hammering the upstream PPT API
+    const BATCH = 3
+    for (let i = 0; i < toRefresh.length; i += BATCH) {
+      const batch = toRefresh.slice(i, i + BATCH)
+      await Promise.allSettled(
+        batch.map(async (item) => {
+          const cid = item.cards.id
+          if (refreshed.current.has(cid)) return
+          refreshed.current.add(cid)
 
-        try {
-          const res = await fetch(`/api/refresh-price?card_id=${encodeURIComponent(cid)}`)
-          if (!res.ok) return
-          const { usd_price, inr_price, aed_price, last_fetched } = await res.json()
+          try {
+            const res = await fetch(`/api/refresh-price?card_id=${encodeURIComponent(cid)}`)
+            if (!res.ok) return
+            const { usd_price, inr_price, aed_price, last_fetched } = await res.json()
 
-          setItems(prev =>
-            prev.map(i =>
-              i.cards.id !== cid
-                ? i
-                : {
-                    ...i,
-                    cards: {
-                      ...i.cards,
-                      card_prices: [{ usd_price, inr_price, aed_price, last_fetched }],
-                    },
-                  }
+            setItems(prev =>
+              prev.map(it =>
+                it.cards.id !== cid
+                  ? it
+                  : {
+                      ...it,
+                      cards: {
+                        ...it.cards,
+                        card_prices: [{ usd_price, inr_price, aed_price, last_fetched }],
+                      },
+                    }
+              )
             )
-          )
-        } finally {
-          setPriceLoadingIds(prev => {
-            const next = new Set(prev)
-            next.delete(cid)
-            return next
-          })
-        }
-      })
-    )
+          } finally {
+            setPriceLoadingIds(prev => {
+              const next = new Set(prev)
+              next.delete(cid)
+              return next
+            })
+          }
+        })
+      )
+      // 1-second gap between batches keeps us well under the 60 req/min PPT limit
+      if (i + BATCH < toRefresh.length) await new Promise(r => setTimeout(r, 1000))
+    }
   }, [profileUserId])
 
   useEffect(() => {
@@ -316,7 +328,10 @@ export default function BinderView({
   const pricesStillLoading = priceLoadingIds.size > 0 || !countryReady
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 py-8 pb-48">
+    <main
+      className="min-h-screen px-4 py-8 pb-48"
+      style={{ background: 'radial-gradient(ellipse at 60% -20%, #3d1f80 0%, #1a0830 35%, #0a0514 100%)' }}
+    >
       <div className="max-w-lg mx-auto">
 
         {/* Header */}
@@ -346,14 +361,17 @@ export default function BinderView({
 
         {/* Total value banner */}
         {!loading && items.length > 0 && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 mb-6 ring-1 ring-yellow-400/10">
+          <div
+            className="rounded-2xl px-5 py-4 mb-6"
+            style={{ background: 'linear-gradient(135deg, #1e1035, #160e20)', border: '1px solid rgba(255,222,0,0.2)', boxShadow: '0 0 30px rgba(124,83,140,0.15)' }}
+          >
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
               {pricesStillLoading ? 'Updating prices…' : 'Total collection value'}
             </p>
             {pricesStillLoading ? (
               <div className="h-8 w-36 bg-zinc-800 rounded-lg animate-pulse" />
             ) : (
-              <p className="text-3xl font-black text-yellow-400 tracking-tight">
+              <p className="text-3xl font-black tracking-tight text-gradient-pika">
                 {formatPrice(totalLocal, countryCode)}
               </p>
             )}
@@ -369,7 +387,10 @@ export default function BinderView({
             {Array.from({ length: 6 }).map((_, i) => <SkeletonTile key={i} />)}
           </div>
         ) : items.length === 0 ? (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-10 text-center ring-1 ring-yellow-400/10">
+          <div
+            className="rounded-2xl p-10 text-center"
+            style={{ background: 'linear-gradient(135deg, #1e1035, #160e20)', border: '1px solid rgba(255,222,0,0.15)', boxShadow: '0 0 30px rgba(124,83,140,0.12)' }}
+          >
             <span className="text-5xl mb-4 block">📦</span>
             <h2 className="text-white font-black text-lg mb-2">
               {isOwner ? 'Your binder is empty' : 'No cards yet'}
@@ -414,7 +435,8 @@ export default function BinderView({
             + Add Cards
           </Link>
           <button
-            className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-white font-black rounded-2xl px-6 py-3.5 text-sm tracking-wide transition-colors shadow-xl border border-zinc-700"
+            className="flex items-center gap-2 text-white font-black rounded-2xl px-6 py-3.5 text-sm tracking-wide transition-colors shadow-xl"
+            style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.35)' }}
             onClick={() => setScanOpen(true)}
           >
             📷 Scan Card

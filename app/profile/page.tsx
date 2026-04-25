@@ -130,11 +130,14 @@ function EditProfileModal({
   return (
     <>
       <div onClick={onClose} className="fixed inset-0 bg-black/70 z-50 backdrop-blur-sm" />
-      <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-sm mx-auto bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl max-h-[85vh] flex flex-col">
+      <div
+        className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-sm mx-auto rounded-3xl overflow-hidden shadow-2xl max-h-[85vh] flex flex-col"
+        style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.3)' }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ borderBottom: '1px solid rgba(139,92,246,0.2)' }}>
           <h2 className="text-white font-black text-base">Edit Profile</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white text-sm">✕</button>
+          <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-white text-sm" style={{ background: '#2a1f3a' }}>✕</button>
         </div>
 
         <div className="overflow-y-auto flex-1 p-5 space-y-4">
@@ -171,7 +174,8 @@ function EditProfileModal({
               value={username}
               onChange={e => setUsername(e.target.value)}
               maxLength={30}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-400 transition-colors"
+              className="w-full rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none transition-colors"
+              style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)' }}
             />
           </div>
 
@@ -184,7 +188,8 @@ function EditProfileModal({
               maxLength={160}
               rows={3}
               placeholder="Tell traders about yourself..."
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-400 transition-colors resize-none placeholder:text-zinc-600"
+              className="w-full rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none transition-colors resize-none placeholder:text-zinc-600"
+              style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)' }}
             />
             <p className="text-right text-[10px] text-zinc-600 mt-1">{bio.length}/160</p>
           </div>
@@ -197,11 +202,11 @@ function EditProfileModal({
                 <button
                   key={c.code}
                   onClick={() => handleCountryChange(c.code)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-semibold transition-colors ${
-                    country === c.code
-                      ? 'bg-yellow-400/10 border-yellow-400 text-yellow-400'
-                      : 'bg-zinc-800 border-zinc-700 text-zinc-400'
-                  }`}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                  style={country === c.code
+                    ? { background: 'rgba(255,222,0,0.1)', border: '1px solid #FFDE00', color: '#FFDE00' }
+                    : { background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)', color: '#a1a1aa' }
+                  }
                 >
                   <span>{c.flag}</span>
                   <span>{c.name}</span>
@@ -217,7 +222,8 @@ function EditProfileModal({
               <select
                 value={city}
                 onChange={e => setCity(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-400 transition-colors"
+                className="w-full rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none transition-colors"
+              style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)' }}
               >
                 <option value="">Select city…</option>
                 {(CITIES[country] ?? []).map(c => (
@@ -233,17 +239,19 @@ function EditProfileModal({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-zinc-800 space-y-2 flex-shrink-0">
+        <div className="px-5 py-4 space-y-2 flex-shrink-0" style={{ borderTop: '1px solid rgba(139,92,246,0.2)' }}>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="w-full bg-yellow-400 hover:bg-yellow-300 disabled:opacity-50 text-black font-black rounded-xl py-3 text-sm tracking-wide transition-colors shadow-lg shadow-yellow-400/20"
+            className="w-full disabled:opacity-50 text-black font-black rounded-xl py-3 text-sm tracking-wide transition-all"
+            style={{ background: 'linear-gradient(135deg, #FFDE00, #F4C430)', boxShadow: '0 0 18px rgba(255,222,0,0.35)' }}
           >
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
           <button
             onClick={onClose}
-            className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl py-2.5 text-sm transition-colors"
+            className="w-full text-zinc-300 font-bold rounded-xl py-2.5 text-sm transition-colors"
+            style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.2)' }}
           >
             Cancel
           </button>
@@ -311,7 +319,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-zinc-950">
+      <div className="min-h-screen" style={{ background: '#0a0514' }}>
         <ProfileSkeleton />
       </div>
     )
@@ -319,7 +327,7 @@ export default function ProfilePage() {
 
   if (!profile || !stats) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0a0514' }}>
         <p className="text-zinc-500 text-sm">Failed to load profile.</p>
       </div>
     )
@@ -333,12 +341,15 @@ export default function ProfilePage() {
   const ratingDisplay = stats.avg_rating != null ? stats.avg_rating.toFixed(1) : '—'
 
   return (
-    <div className="min-h-screen bg-zinc-950 pb-28">
+    <div className="min-h-screen pb-28" style={{ background: 'radial-gradient(ellipse at 50% -10%, #2d1060 0%, #1a0830 40%, #0a0514 100%)' }}>
 
       {/* ── Header banner ───────────────────────────────────────────────── */}
       <div className="relative">
-        {/* Gradient banner */}
-        <div className="h-36 bg-gradient-to-br from-zinc-900 via-zinc-800 to-yellow-900/40" />
+        {/* Pokemon sky gradient banner */}
+        <div
+          className="h-36"
+          style={{ background: 'linear-gradient(135deg, #0a0514 0%, #2d1060 35%, #7c3a00 72%, #ff6b35 100%)' }}
+        />
 
         {/* Edit button top-right */}
         <button
@@ -351,7 +362,12 @@ export default function ProfilePage() {
         {/* Avatar — overlaps banner */}
         <div className="flex flex-col items-center px-5 -mt-12 pb-4">
           <button onClick={() => setEditOpen(true)} className="relative mb-3 group">
-            <div className="w-24 h-24 rounded-full border-4 border-zinc-950 overflow-hidden bg-zinc-800 shadow-xl shadow-black/50">
+            {/* Championship belt ring */}
+            <div
+              className="rounded-full p-[3px]"
+              style={{ background: 'linear-gradient(135deg, #FFDE00, #FF6B35, #EE1515, #7C538C, #FFDE00)', boxShadow: '0 0 20px rgba(255,222,0,0.4)' }}
+            >
+            <div className="w-24 h-24 rounded-full overflow-hidden bg-zinc-800 shadow-xl" style={{ border: '3px solid #0a0514' }}>
               {profile.avatar_url ? (
                 <Image
                   src={profile.avatar_url}
@@ -367,12 +383,16 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+            </div>{/* end championship ring */}
             {/* Camera overlay */}
             <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-colors">
               <span className="text-white text-xl opacity-0 group-hover:opacity-100 transition-opacity">📷</span>
             </div>
             {/* Small camera badge */}
-            <div className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-yellow-400 border-2 border-zinc-950 flex items-center justify-center text-xs shadow-md">
+            <div
+              className="absolute bottom-0 right-0 w-7 h-7 rounded-full flex items-center justify-center text-xs shadow-md"
+              style={{ background: 'linear-gradient(135deg, #FFDE00, #F4C430)', border: '2px solid #0a0514' }}
+            >
               📷
             </div>
           </button>
@@ -407,18 +427,22 @@ export default function ProfilePage() {
 
       {/* ── Stats row ───────────────────────────────────────────────────── */}
       <div className="px-4 mb-4">
-        <div className="grid grid-cols-4 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+        <div
+          className="grid grid-cols-4 rounded-2xl overflow-hidden"
+          style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}
+        >
           {[
-            { label: 'Cards',  value: stats.card_count.toLocaleString() },
-            { label: 'Value',  value: collectionVal },
-            { label: 'Trades', value: stats.trade_count.toLocaleString() },
-            { label: 'Rating', value: `${ratingDisplay}${stats.avg_rating != null ? ' ★' : ''}` },
+            { label: 'Cards',  value: stats.card_count.toLocaleString(), color: '#FFDE00' },
+            { label: 'Value',  value: collectionVal,                      color: '#FF6B35' },
+            { label: 'Trades', value: stats.trade_count.toLocaleString(), color: '#00A7E1' },
+            { label: 'Rating', value: `${ratingDisplay}${stats.avg_rating != null ? ' ★' : ''}`, color: '#F4C430' },
           ].map((stat, i, arr) => (
             <div
               key={stat.label}
-              className={`flex flex-col items-center py-4 ${i < arr.length - 1 ? 'border-r border-zinc-800' : ''}`}
+              className="flex flex-col items-center py-4"
+              style={{ borderRight: i < arr.length - 1 ? '1px solid rgba(139,92,246,0.15)' : 'none' }}
             >
-              <span className="text-white font-black text-base leading-none mb-1">{stat.value}</span>
+              <span className="font-black text-base leading-none mb-1" style={{ color: stat.color }}>{stat.value}</span>
               <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wide">{stat.label}</span>
             </div>
           ))}
@@ -427,7 +451,7 @@ export default function ProfilePage() {
 
       {/* ── Bio ─────────────────────────────────────────────────────────── */}
       <div className="px-4 mb-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+        <div className="rounded-2xl p-4" style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}>
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-wide">Bio</h3>
             <button
@@ -449,8 +473,8 @@ export default function ProfilePage() {
 
       {/* ── Collection preview ──────────────────────────────────────────── */}
       <div className="px-4 mb-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-zinc-800">
+        <div className="rounded-2xl overflow-hidden" style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}>
+          <div className="flex items-center justify-between px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
             <h3 className="text-white font-black text-sm">My Collection</h3>
             <Link
               href="/binder"
@@ -466,7 +490,7 @@ export default function ProfilePage() {
             <div className="flex gap-3 overflow-x-auto px-4 py-3 scrollbar-none" style={{ WebkitOverflowScrolling: 'touch' }}>
               {previewCards.map(uc => (
                 <Link key={uc.id} href="/binder" className="flex-shrink-0">
-                  <div className="w-20 rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700/50" style={{ aspectRatio: '2.5/3.5' }}>
+                  <div className="w-20 rounded-xl overflow-hidden" style={{ aspectRatio: '2.5/3.5', background: '#1a1028', border: '1px solid rgba(139,92,246,0.2)' }}>
                     {uc.cards?.image_url ? (
                       <Image
                         src={uc.cards.image_url}
@@ -493,15 +517,16 @@ export default function ProfilePage() {
 
       {/* ── Settings ────────────────────────────────────────────────────── */}
       <div className="px-4 mb-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden divide-y divide-zinc-800">
+        <div className="rounded-2xl overflow-hidden" style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}>
           {[
             { icon: '🔔', label: 'Notification Preferences' },
             { icon: '❓', label: 'Help & Support' },
             { icon: '📤', label: 'Share App' },
-          ].map(item => (
+          ].map((item, i, arr) => (
             <button
               key={item.label}
-              className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-zinc-800/50 transition-colors active:bg-zinc-800"
+              className="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors"
+              style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(139,92,246,0.12)' : 'none' }}
             >
               <span className="text-lg w-7 text-center">{item.icon}</span>
               <span className="flex-1 text-zinc-300 text-sm font-medium">{item.label}</span>

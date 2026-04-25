@@ -78,16 +78,18 @@ function Avatar({ user }: { user: OtherUser }) {
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
+const STATUS_META: Record<MatchStatus, { label: string; icon: string; cls: string; glow?: string }> = {
+  PENDING:   { label: 'PENDING',   icon: '⚡', cls: 'bg-yellow-400/15 text-yellow-400 border border-yellow-400/30', glow: 'badge-pending'  },
+  ACTIVE:    { label: 'ACTIVE',    icon: '✨', cls: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25', glow: 'badge-active' },
+  DECLINED:  { label: 'DECLINED',  icon: '💔', cls: 'bg-zinc-700/30 text-zinc-500 border border-zinc-700/30' },
+  COMPLETED: { label: 'COMPLETED', icon: '✓',  cls: 'bg-zinc-700/30 text-zinc-500 border border-zinc-700/30' },
+}
+
 function StatusBadge({ status }: { status: MatchStatus }) {
-  const styles: Record<MatchStatus, string> = {
-    PENDING:   'bg-yellow-400/15 text-yellow-400',
-    ACTIVE:    'bg-emerald-500/15 text-emerald-400',
-    DECLINED:  'bg-zinc-500/20 text-zinc-500',
-    COMPLETED: 'bg-zinc-500/20 text-zinc-500',
-  }
+  const m = STATUS_META[status]
   return (
-    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${styles[status]}`}>
-      {status}
+    <span className={`inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full ${m.cls} ${m.glow ?? ''}`}>
+      <span>{m.icon}</span>{m.label}
     </span>
   )
 }
@@ -110,10 +112,13 @@ function MatchItem({
   const timestamp = match.lastMessage?.created_at ?? match.created_at
 
   return (
-    <div className="relative border-b border-zinc-800/40 last:border-0">
+    <div className="relative" style={{ borderBottom: '1px solid rgba(139,92,246,0.12)' }}>
       <Link
         href={`/matches/${match.id}`}
-        className="flex items-start gap-3 px-4 py-3.5 hover:bg-zinc-900/50 active:bg-zinc-900 transition-colors"
+        className="flex items-start gap-3 px-4 py-3.5 transition-colors"
+        style={{ ':hover': { background: 'rgba(42,31,58,0.5)' } } as React.CSSProperties}
+        onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(42,31,58,0.5)'}
+        onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.background = 'transparent'}
       >
         {/* Avatar */}
         {other ? (
@@ -131,7 +136,10 @@ function MatchItem({
             </span>
             <StatusBadge status={match.status} />
             {match.lastMessage?.isUnread && (
-              <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+              <span
+                className="text-[11px] flex-shrink-0"
+                style={{ animation: 'navBadgePulse 1.5s ease-in-out infinite', display: 'inline-block' }}
+              >⚡</span>
             )}
           </div>
 
@@ -230,10 +238,13 @@ export default function MatchesPage() {
   const sorted = sortMatches(matches)
 
   return (
-    <main className="min-h-screen bg-zinc-950 pb-28">
+    <main className="min-h-screen pb-28" style={{ background: 'radial-gradient(ellipse at 50% -10%, #2d1060 0%, #1a0830 40%, #0a0514 100%)' }}>
 
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-900 px-4 py-3.5">
+      <div
+        className="sticky top-0 z-20 backdrop-blur-sm px-4 py-3.5"
+        style={{ background: 'rgba(10,5,20,0.96)', borderBottom: '1px solid rgba(139,92,246,0.18)' }}
+      >
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <h1 className="text-white font-black text-base tracking-tight">Trades</h1>
           <div className="flex items-center gap-4">
@@ -253,15 +264,15 @@ export default function MatchesPage() {
           // Skeleton
           <div className="pt-2">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="flex items-start gap-3 px-4 py-3.5 border-b border-zinc-800/40 animate-pulse">
-                <div className="w-11 h-11 rounded-full bg-zinc-800 flex-shrink-0" />
+              <div key={i} className="flex items-start gap-3 px-4 py-3.5 animate-pulse" style={{ borderBottom: '1px solid rgba(139,92,246,0.12)' }}>
+                <div className="w-11 h-11 rounded-full flex-shrink-0" style={{ background: '#2a1f3a' }} />
                 <div className="flex-1 space-y-2 pt-1">
                   <div className="flex gap-2">
-                    <div className="w-24 h-3 bg-zinc-800 rounded" />
-                    <div className="w-14 h-3 bg-zinc-800 rounded" />
+                    <div className="w-24 h-3 rounded" style={{ background: '#2a1f3a' }} />
+                    <div className="w-14 h-3 rounded" style={{ background: '#2a1f3a' }} />
                   </div>
-                  <div className="w-16 h-2.5 bg-zinc-800 rounded" />
-                  <div className="w-48 h-2.5 bg-zinc-800 rounded" />
+                  <div className="w-16 h-2.5 rounded" style={{ background: '#2a1f3a' }} />
+                  <div className="w-48 h-2.5 rounded" style={{ background: '#2a1f3a' }} />
                 </div>
               </div>
             ))}

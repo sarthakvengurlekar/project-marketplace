@@ -167,12 +167,21 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 py-10">
+    <main
+      className="min-h-screen px-4 py-10"
+      style={{ background: 'radial-gradient(ellipse at top, #1a0a2e 0%, #0a0514 65%)' }}
+    >
       <div className="max-w-sm mx-auto">
 
         {/* Header */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-yellow-400 mb-4 shadow-lg shadow-yellow-400/30">
+          <div
+            className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
+            style={{
+              background: 'linear-gradient(135deg, #FFDE00 0%, #F4C430 100%)',
+              boxShadow:  '0 0 24px rgba(255,222,0,0.5), 0 0 48px rgba(255,222,0,0.2)',
+            }}
+          >
             <span className="text-2xl font-black text-black">PT</span>
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight">Set up your profile</h1>
@@ -358,7 +367,11 @@ export default function OnboardingPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 disabled:opacity-40 disabled:cursor-not-allowed text-black font-black rounded-xl py-3.5 text-sm tracking-wide transition-colors shadow-lg shadow-yellow-400/20"
+            className="w-full disabled:opacity-40 disabled:cursor-not-allowed text-black font-black rounded-xl py-3.5 text-sm tracking-wide transition-all"
+            style={{
+              background: 'linear-gradient(135deg, #FFDE00 0%, #F4C430 100%)',
+              boxShadow:  '0 0 18px rgba(255,222,0,0.4), 0 4px 12px rgba(0,0,0,0.3)',
+            }}
           >
             {loading ? 'Saving…' : 'Complete Setup →'}
           </button>

@@ -76,6 +76,9 @@ function extractTcgPrice(tcgplayer: Record<string, unknown> | undefined): number
   return null
 }
 
+// ─── PPT blocked-state key in exchange_rates ─────────────────────────────────
+const PPT_BLOCK_KEY = 'PPT_BLOCKED_UNTIL'
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -85,62 +88,113 @@ export async function GET(request: NextRequest) {
   }
 
   const pptKey = process.env.POKEMON_PRICE_TRACKER_API_KEY?.trim()
-  if (!pptKey) {
-    console.warn('[refresh-price] POKEMON_PRICE_TRACKER_API_KEY is not set — falling back to TCG API only')
-  }
 
   const supabase = await createSupabaseServerClient()
   const lastFetched = new Date().toISOString()
 
-  // ── Step 1: try PokemonPriceTracker ──────────────────────────────────────────
+  // ── Step 1: try PokemonPriceTracker (skip if currently blocked) ──────────────
   let usdPrice: number | null = null
 
   if (pptKey) {
-    const pptUrl = `${PPT_BASE}/cards?tcgPlayerId=${encodeURIComponent(cardId)}`
-    console.log('[refresh-price] PPT URL:', pptUrl)
-    try {
-      const pptRes = await fetch(pptUrl, {
-        headers: { Authorization: `Bearer ${pptKey}` },
-        cache: 'no-store',
-      })
-      console.log('[refresh-price] PPT status:', pptRes.status)
-      if (pptRes.ok) {
-        const pptJson = await pptRes.json()
-        console.log('[refresh-price] PPT raw response:', JSON.stringify(pptJson, null, 2))
-        // API returns data as a single object, not an array
-        const market = pptJson?.data?.prices?.market
-        console.log('[refresh-price] PPT market price:', market)
-        if (typeof market === 'number' && market > 0) {
-          usdPrice = market
+    // Check persistent PPT block stored in exchange_rates
+    const { data: blockRow } = await supabase
+      .from('exchange_rates')
+      .select('rate')
+      .eq('currency_pair', PPT_BLOCK_KEY)
+      .maybeSingle()
+
+    const pptBlockedUntil = blockRow?.rate ?? 0
+    const pptBlocked = Date.now() < pptBlockedUntil
+
+    if (pptBlocked) {
+      const remainMins = Math.ceil((pptBlockedUntil - Date.now()) / 60_000)
+      console.log(`[refresh-price] PPT still blocked for ~${remainMins} min — skipping`)
+    } else {
+      const pptUrl = `${PPT_BASE}/cards?tcgPlayerId=${encodeURIComponent(cardId)}`
+      try {
+        const pptRes = await fetch(pptUrl, {
+          headers: { Authorization: `Bearer ${pptKey}` },
+          cache: 'no-store',
+        })
+        if (pptRes.ok) {
+          const pptJson = await pptRes.json()
+          const market = pptJson?.data?.prices?.market
+          if (typeof market === 'number' && market > 0) usdPrice = market
+        } else if (pptRes.status === 403 || pptRes.status === 429) {
+          // Parse retryAfter (PPT returns it in seconds)
+          let bodyText = ''
+          try { bodyText = await pptRes.text() } catch { /* ignore */ }
+          let retryAfterSec = 3600 // default: 1 hour
+          try {
+            const body = JSON.parse(bodyText)
+            if (typeof body?.retryAfter === 'number' && body.retryAfter > 0) {
+              retryAfterSec = body.retryAfter
+            }
+          } catch { /* ignore */ }
+          // Enforce a minimum 10-minute cooldown so we don't thrash on short blocks
+          const cooldownMs = Math.max(retryAfterSec * 1000, 10 * 60 * 1000)
+          const blockedUntil = Date.now() + cooldownMs
+          await supabase.from('exchange_rates').upsert(
+            { currency_pair: PPT_BLOCK_KEY, rate: blockedUntil, last_fetched: new Date().toISOString() },
+            { onConflict: 'currency_pair' }
+          )
+          console.warn(`[refresh-price] PPT blocked (${pptRes.status}) — stored cooldown for ${Math.round(cooldownMs / 60_000)} min`)
         }
-      } else {
-        const errBody = await pptRes.text().catch(() => '')
-        console.warn(`[refresh-price] PPT API returned ${pptRes.status}:`, errBody)
+      } catch (err) {
+        console.warn('[refresh-price] PPT fetch error:', err)
       }
-    } catch (err) {
-      console.warn('[refresh-price] PPT fetch error:', err)
     }
   }
 
   // ── Step 2: fall back to Pokemon TCG API if PPT had no price ─────────────────
   if (usdPrice === null) {
     const tcgKey = process.env.NEXT_PUBLIC_POKEMON_TCG_API_KEY?.trim()
-    try {
-      const tcgRes = await fetch(
-        `https://api.pokemontcg.io/v2/cards/${encodeURIComponent(cardId)}`,
-        {
-          headers: tcgKey ? { 'X-Api-Key': tcgKey } : {},
-          next: { revalidate: 0 },
+    const headers: Record<string, string> = tcgKey ? { 'X-Api-Key': tcgKey } : {}
+
+    // For numeric IDs (TCGPlayer IDs), the TCG API needs a name-based search.
+    // Look up card metadata from DB first.
+    const isNumericId = /^\d+$/.test(cardId)
+
+    if (!isNumericId) {
+      // Alphanumeric ID — direct lookup works
+      try {
+        const res = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(cardId)}`, { headers, next: { revalidate: 0 } })
+        if (res.ok) {
+          const { data: card } = await res.json()
+          usdPrice = extractTcgPrice(card?.tcgplayer)
         }
-      )
-      if (tcgRes.ok) {
-        const { data: card } = await tcgRes.json()
-        usdPrice = extractTcgPrice(card?.tcgplayer)
-      } else {
-        console.warn(`[refresh-price] TCG API returned ${tcgRes.status} for ${cardId}`)
-      }
-    } catch (err) {
-      console.warn('[refresh-price] TCG fetch error:', err)
+      } catch { /* ignore */ }
+    }
+
+    // Numeric ID or direct lookup missed — search by name + number
+    if (usdPrice === null) {
+      try {
+        const { data: meta } = await supabase
+          .from('cards')
+          .select('name, card_number')
+          .eq('id', cardId)
+          .maybeSingle()
+
+        if (meta?.name) {
+          // Strip the "/total" from card number (e.g. "037/217" → "037")
+          const num = meta.card_number?.split('/')?.[0]?.replace(/^0+/, '') ?? ''
+          const q = num
+            ? `name:"${meta.name}" number:${num}`
+            : `name:"${meta.name}"`
+
+          const res = await fetch(
+            `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=8&orderBy=-set.releaseDate`,
+            { headers, next: { revalidate: 0 } }
+          )
+          if (res.ok) {
+            const { data: cards } = await res.json()
+            for (const card of (cards ?? [])) {
+              const p = extractTcgPrice(card?.tcgplayer)
+              if (p != null) { usdPrice = p; break }
+            }
+          }
+        }
+      } catch { /* ignore */ }
     }
   }
 

@@ -3,19 +3,94 @@
 @tailwind utilities;
 
 :root {
-  --background: #09090b;
+  --background: #0a0514;
   --foreground: #fafafa;
+  --pika:   #FFDE00;
+  --char:   #FF6B35;
+  --squirt: #00A7E1;
+  --bulba:  #78C850;
+  --gengar: #7C538C;
+  --ball:   #EE1515;
 }
 
 body {
   color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #0a0514;
+  font-family: var(--font-poppins), 'Poppins', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  .text-balance { text-wrap: balance; }
+
+  /* Gradient text */
+  .text-gradient-pika {
+    background: linear-gradient(135deg, #FFDE00 0%, #FF6B35 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
+  .text-gradient-purple {
+    background: linear-gradient(135deg, #9C6BA6 0%, #00A7E1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Holographic card tile — subtle rainbow ring + lift on hover */
+  .holo-card {
+    transition: box-shadow 0.25s ease, transform 0.2s ease;
+  }
+  .holo-card:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 0 0 1.5px rgba(255,222,0,0.4),
+      0 0 20px  rgba(255,222,0,0.18),
+      0 0 40px  rgba(124,83,140,0.12),
+      0 10px 28px rgba(0,0,0,0.45);
+  }
+
+  /* Animated foil badge */
+  .foil-badge {
+    background: linear-gradient(135deg, #FFDE00, #FF6B35, #EE1515, #7C538C, #00A7E1, #78C850, #FFDE00);
+    background-size: 250% 250%;
+    animation: holoShift 2.5s linear infinite;
+    color: #000 !important;
+    border: none !important;
+  }
+
+  /* Condition badge glows */
+  .badge-nm { box-shadow: 0 0 9px rgba(20,184,166,0.6); }
+  .badge-lp { box-shadow: 0 0 9px rgba(59,130,246,0.6); }
+  .badge-mp { box-shadow: 0 0 9px rgba(249,115,22,0.6); }
+  .badge-hp { box-shadow: 0 0 12px rgba(239,68,68,0.7); }
+
+  /* Grade badge glows */
+  .glow-psa { box-shadow: 0 0 10px rgba(220,38,38,0.6),  0 0 22px rgba(220,38,38,0.2);  }
+  .glow-bgs { box-shadow: 0 0 10px rgba(217,119,6,0.6),  0 0 22px rgba(217,119,6,0.2);  }
+  .glow-cgc { box-shadow: 0 0 10px rgba(37,99,235,0.6),  0 0 22px rgba(37,99,235,0.2);  }
+  .glow-tag { box-shadow: 0 0 10px rgba(124,83,140,0.65),0 0 22px rgba(124,83,140,0.25);}
+
+  /* Status badge glows */
+  .badge-pending { box-shadow: 0 0 8px rgba(255,222,0,0.5); }
+  .badge-active  { box-shadow: 0 0 8px rgba(52,211,153,0.5); }
+
+  /* Scrollbar hide */
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+@keyframes holoShift {
+  0%   { background-position: 0%   50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0%   50%; }
+}
+
+@keyframes navBadgePulse {
+  0%,  100% { transform: scale(1.0); }
+  50%        { transform: scale(1.15); }
+}
+
+@keyframes acSpin {
+  to { transform: rotate(360deg); }
 }

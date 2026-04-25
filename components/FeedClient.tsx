@@ -70,7 +70,15 @@ function SellerCard({
   disabled: boolean
 }) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden ring-1 ring-yellow-400/5">
+    <div
+      className="rounded-3xl overflow-hidden"
+      style={{
+        background:  '#160e20',
+        border:      '1px solid rgba(255,222,0,0.12)',
+        boxShadow:   '0 0 0 1px rgba(124,83,140,0.12), 0 4px 24px rgba(0,0,0,0.4)',
+        borderTop:   '2.5px solid rgba(255,222,0,0.35)',
+      }}
+    >
 
       {/* Profile header */}
       <div className="p-4 pb-3">
@@ -85,8 +93,15 @@ function SellerCard({
                 unoptimized
               />
             ) : (
-              <div className="w-12 h-12 rounded-full bg-yellow-400/20 border border-yellow-400/30 flex items-center justify-center">
-                <span className="text-yellow-400 font-black text-base uppercase">
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255,222,0,0.2), rgba(255,107,53,0.15))',
+                  border:     '1.5px solid rgba(255,222,0,0.35)',
+                  boxShadow:  '0 0 10px rgba(255,222,0,0.15)',
+                }}
+              >
+                <span className="font-black text-base uppercase" style={{ color: '#FFDE00' }}>
                   {seller.username[0]}
                 </span>
               </div>
@@ -119,7 +134,7 @@ function SellerCard({
             className="flex-shrink-0 w-[72px]"
             style={{ scrollSnapAlign: 'start' }}
           >
-            <div className="relative w-[72px] h-[100px] rounded-xl overflow-hidden bg-zinc-800">
+            <div className="relative w-[72px] h-[100px] rounded-xl overflow-hidden" style={{ background: '#1a1028' }}>
               {item.cards?.image_url && (
                 <Image
                   src={item.cards.image_url}
@@ -153,23 +168,36 @@ function SellerCard({
         </Link>
       </div>
 
-      <div className="border-t border-zinc-800" />
-
       {/* Pass / Interested */}
-      <div className="grid grid-cols-2 divide-x divide-zinc-800">
+      <div className="grid grid-cols-2 gap-3 px-4 py-4">
         <button
           onClick={() => onSwipe(seller.id, seller.username, 'PASS')}
           disabled={disabled}
-          className="py-3.5 flex items-center justify-center gap-2 text-zinc-400 hover:text-white hover:bg-zinc-800/50 active:bg-zinc-800 transition-all text-sm font-bold disabled:opacity-30"
+          className="py-4 flex items-center justify-center gap-2 rounded-2xl text-sm font-black transition-all disabled:opacity-30"
+          style={{
+            background: 'rgba(238,21,21,0.1)',
+            border:     '1px solid rgba(238,21,21,0.25)',
+            color:      '#f87171',
+          }}
+          onMouseEnter={e => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 16px rgba(238,21,21,0.35)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none' }}
         >
-          <span>✕</span> Pass
+          <span className="text-lg">✕</span> Pass
         </button>
         <button
           onClick={() => onSwipe(seller.id, seller.username, 'LIKE')}
           disabled={disabled}
-          className="py-3.5 flex items-center justify-center gap-2 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/5 active:bg-yellow-400/10 transition-all text-sm font-bold disabled:opacity-30"
+          className="py-4 flex items-center justify-center gap-2 rounded-2xl text-sm font-black transition-all disabled:opacity-30"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,222,0,0.18) 0%, rgba(255,107,53,0.18) 100%)',
+            border:     '1px solid rgba(255,222,0,0.3)',
+            color:      '#FFDE00',
+            boxShadow:  '0 0 14px rgba(255,222,0,0.12)',
+          }}
+          onMouseEnter={e => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(255,222,0,0.35)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 14px rgba(255,222,0,0.12)' }}
         >
-          <span>♥</span> Interested
+          <span className="text-lg">♥</span> Interested
         </button>
       </div>
     </div>
@@ -258,10 +286,13 @@ export default function FeedClient({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <main className="min-h-screen bg-zinc-950 pb-28">
+    <main className="min-h-screen pb-28" style={{ background: 'radial-gradient(ellipse at 50% -10%, #2d1060 0%, #1a0830 40%, #0a0514 100%)' }}>
 
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-900 px-4 py-3">
+      <div
+        className="sticky top-0 z-20 backdrop-blur-sm px-4 py-3"
+        style={{ background: 'rgba(10,5,20,0.96)', borderBottom: '1px solid rgba(139,92,246,0.18)' }}
+      >
         <div className="max-w-lg mx-auto space-y-3">
 
           {/* Nav */}
@@ -294,11 +325,11 @@ export default function FeedClient({
               <button
                 key={c}
                 onClick={() => setCountryFilter(c)}
-                className={`flex-1 py-1.5 rounded-xl text-xs font-black transition-all ${
-                  countryFilter === c
-                    ? 'bg-yellow-400 text-black shadow-lg shadow-yellow-400/20'
-                    : 'bg-zinc-800 text-zinc-400 hover:text-white'
-                }`}
+                className="flex-1 py-1.5 rounded-xl text-xs font-black transition-all"
+                style={countryFilter === c
+                  ? { background: 'linear-gradient(135deg, #FFDE00, #F4C430)', color: '#111', boxShadow: '0 0 14px rgba(255,222,0,0.3)' }
+                  : { background: '#2a1f3a', color: '#a1a1aa', border: '1px solid rgba(139,92,246,0.2)' }
+                }
               >
                 {c === 'IN' ? '🇮🇳 India' : c === 'UAE' ? '🇦🇪 UAE' : 'Both'}
               </button>
@@ -313,7 +344,8 @@ export default function FeedClient({
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search by card name…"
-              className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-xl pl-9 pr-9 py-2.5 text-sm focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 transition-all"
+              className="w-full text-white placeholder-zinc-600 rounded-xl pl-9 pr-9 py-2.5 text-sm focus:outline-none transition-all"
+              style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)' }}
             />
             {searchQuery && (
               <button
@@ -331,7 +363,10 @@ export default function FeedClient({
       {/* Feed */}
       <div className="max-w-lg mx-auto px-4 pt-5 space-y-4">
         {visibleSellers.length === 0 ? (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-10 text-center ring-1 ring-yellow-400/10 mt-4">
+          <div
+            className="rounded-2xl p-10 text-center mt-4"
+            style={{ background: 'linear-gradient(135deg, #1e1035, #160e20)', border: '1px solid rgba(255,222,0,0.15)', boxShadow: '0 0 30px rgba(124,83,140,0.12)' }}
+          >
             <span className="text-5xl mb-4 block">🔍</span>
             <h2 className="text-white font-black text-lg mb-2">No traders found here</h2>
             <p className="text-zinc-500 text-sm leading-relaxed">
@@ -362,7 +397,15 @@ export default function FeedClient({
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-sm font-semibold px-5 py-3 rounded-2xl shadow-xl backdrop-blur-sm max-w-xs w-[calc(100%-3rem)] text-center">
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 text-sm font-semibold px-5 py-3 rounded-2xl shadow-xl backdrop-blur-sm max-w-xs w-[calc(100%-3rem)] text-center"
+          style={{
+            background: 'rgba(22, 14, 32, 0.95)',
+            border:     '1px solid rgba(52,211,153,0.35)',
+            color:      '#6ee7b7',
+            boxShadow:  '0 0 20px rgba(52,211,153,0.15), 0 8px 32px rgba(0,0,0,0.5)',
+          }}
+        >
           {toast}
         </div>
       )}

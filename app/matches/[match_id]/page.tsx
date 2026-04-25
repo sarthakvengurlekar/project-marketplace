@@ -89,7 +89,7 @@ function RatingModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 w-full max-w-sm">
+      <div className="rounded-3xl p-6 w-full max-w-sm" style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.3)' }}>
         {done ? (
           <div className="text-center py-4">
             <span className="text-4xl mb-3 block">🎉</span>
@@ -122,7 +122,8 @@ function RatingModal({
               onChange={e => setComment(e.target.value)}
               placeholder="Optional comment…"
               rows={3}
-              className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-yellow-400 resize-none mb-4 transition-all"
+              className="w-full text-white placeholder-zinc-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none mb-4 transition-all"
+              style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)' }}
             />
             <div className="flex gap-3">
               <button
@@ -289,11 +290,11 @@ export default function ChatPage() {
   // ── Loading ────────────────────────────────────���─────────────────────────────
   if (loading) {
     return (
-      <main className="min-h-screen bg-zinc-950 flex flex-col">
-        <div className="sticky top-0 z-20 bg-zinc-950 border-b border-zinc-900 px-4 py-3">
+      <main className="min-h-screen flex flex-col" style={{ background: '#0a0514' }}>
+        <div className="sticky top-0 z-20 px-4 py-3" style={{ background: 'rgba(10,5,20,0.96)', borderBottom: '1px solid rgba(139,92,246,0.18)' }}>
           <div className="max-w-lg mx-auto flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-zinc-800 animate-pulse" />
-            <div className="w-32 h-4 bg-zinc-800 rounded animate-pulse" />
+            <div className="w-8 h-8 rounded-full animate-pulse" style={{ background: '#2a1f3a' }} />
+            <div className="w-32 h-4 rounded animate-pulse" style={{ background: '#2a1f3a' }} />
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center">
@@ -305,7 +306,7 @@ export default function ChatPage() {
 
   if (error || !match) {
     return (
-      <main className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
+      <main className="min-h-screen flex flex-col items-center justify-center p-6 text-center" style={{ background: '#0a0514' }}>
         <span className="text-4xl mb-4">⚠️</span>
         <p className="text-white font-bold mb-2">{error ?? 'Match not found'}</p>
         <p className="text-zinc-500 text-sm mb-6">Match ID: {matchId}</p>
@@ -316,14 +317,15 @@ export default function ChatPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <main className="min-h-screen bg-zinc-950 flex flex-col">
+    <main className="min-h-screen flex flex-col" style={{ background: 'radial-gradient(ellipse at 50% -10%, #2d1060 0%, #1a0830 40%, #0a0514 100%)' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-20 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-900 px-4 py-3 flex-shrink-0">
+      <div className="sticky top-0 z-20 backdrop-blur-sm px-4 py-3 flex-shrink-0" style={{ background: 'rgba(10,5,20,0.96)', borderBottom: '1px solid rgba(139,92,246,0.18)' }}>
         <div className="max-w-lg mx-auto flex items-center gap-3">
           <Link
             href="/matches"
-            className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors text-sm flex-shrink-0"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-white transition-colors text-sm flex-shrink-0"
+            style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.25)' }}
           >
             ←
           </Link>
@@ -367,7 +369,8 @@ export default function ChatPage() {
             {match.status === 'ACTIVE' && (
               <button
                 onClick={() => setShowRating(true)}
-                className="text-[11px] font-black text-zinc-400 hover:text-white border border-zinc-700 hover:border-zinc-500 px-2.5 py-1.5 rounded-xl transition-all"
+                className="text-[11px] font-black text-zinc-400 hover:text-white px-2.5 py-1.5 rounded-xl transition-all"
+            style={{ border: '1px solid rgba(139,92,246,0.3)' }}
               >
                 ✓ Complete
               </button>
@@ -378,10 +381,10 @@ export default function ChatPage() {
 
       {/* ── Status banners ───────────────────────────��─────────────────────── */}
       {match.status === 'PENDING' && role === 'SELLER' && (
-        <div className="flex-shrink-0 bg-yellow-400/10 border-b border-yellow-400/20 px-4 py-3">
+        <div className="flex-shrink-0 px-4 py-3" style={{ background: 'rgba(255,222,0,0.08)', borderBottom: '1px solid rgba(255,222,0,0.2)' }}>
           <div className="max-w-lg mx-auto flex items-center justify-between gap-3">
             <p className="text-yellow-300 text-sm font-semibold leading-snug">
-              {otherUser ? `@${otherUser.username}` : 'Someone'} is interested in your collection
+              ⚡ {otherUser ? `@${otherUser.username}` : 'Someone'} is interested in your collection
             </p>
             <div className="flex gap-2 flex-shrink-0">
               <button
@@ -404,7 +407,7 @@ export default function ChatPage() {
       )}
 
       {match.status === 'PENDING' && role === 'BUYER' && (
-        <div className="flex-shrink-0 bg-blue-500/10 border-b border-blue-500/20 px-4 py-3">
+        <div className="flex-shrink-0 px-4 py-3" style={{ background: 'rgba(0,167,225,0.08)', borderBottom: '1px solid rgba(0,167,225,0.2)' }}>
           <p className="max-w-lg mx-auto text-blue-300 text-sm font-semibold">
             ⏳ Waiting for {otherUser ? `@${otherUser.username}` : 'the seller'} to accept your request
           </p>
@@ -412,20 +415,20 @@ export default function ChatPage() {
       )}
 
       {match.status === 'DECLINED' && (
-        <div className="flex-shrink-0 bg-zinc-800/50 border-b border-zinc-700 px-4 py-3">
-          <p className="max-w-lg mx-auto text-zinc-400 text-sm font-semibold">This request was declined</p>
+        <div className="flex-shrink-0 px-4 py-3" style={{ background: 'rgba(30,22,40,0.8)', borderBottom: '1px solid rgba(100,80,120,0.3)' }}>
+          <p className="max-w-lg mx-auto text-zinc-400 text-sm font-semibold">💔 This request was declined</p>
         </div>
       )}
 
       {match.status === 'COMPLETED' && (
-        <div className="flex-shrink-0 bg-emerald-500/10 border-b border-emerald-500/20 px-4 py-3">
-          <p className="max-w-lg mx-auto text-emerald-400 text-sm font-semibold">✓ Trade completed</p>
+        <div className="flex-shrink-0 px-4 py-3" style={{ background: 'rgba(52,211,153,0.08)', borderBottom: '1px solid rgba(52,211,153,0.2)' }}>
+          <p className="max-w-lg mx-auto text-emerald-400 text-sm font-semibold">✨ Trade completed — well done!</p>
         </div>
       )}
 
       {/* ── Seller cards strip ───────────────────────���──────────────────────── */}
       {sellerCards.length > 0 && (
-        <div className="flex-shrink-0 bg-zinc-900/50 border-b border-zinc-800 px-4 py-3">
+        <div className="flex-shrink-0 px-4 py-3" style={{ background: 'rgba(26,16,40,0.7)', borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
           <div className="max-w-lg mx-auto">
             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Available for trade</p>
             <div
@@ -434,7 +437,7 @@ export default function ChatPage() {
             >
               {sellerCards.map(item => (
                 <div key={item.id} className="flex-shrink-0 w-[54px]" style={{ scrollSnapAlign: 'start' }}>
-                  <div className="relative w-[54px] h-[76px] rounded-lg overflow-hidden bg-zinc-800">
+                  <div className="relative w-[54px] h-[76px] rounded-lg overflow-hidden" style={{ background: '#1a1028' }}>
                     {item.cards?.image_url && (
                       <Image src={item.cards.image_url} alt={item.cards.name ?? ''} fill sizes="54px" className="object-contain" unoptimized />
                     )}
@@ -479,11 +482,18 @@ export default function ChatPage() {
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[75%] flex flex-col gap-0.5 ${isMe ? 'items-end' : 'items-start'}`}>
                   <div
-                    className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${
-                      isMe
-                        ? 'bg-yellow-400 text-black font-medium rounded-br-sm'
-                        : 'bg-zinc-800 text-white rounded-bl-sm'
-                    }`}
+                    className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
+                    style={isMe ? {
+                      background: 'linear-gradient(135deg, #FFDE00 0%, #F4C430 100%)',
+                      color:      '#111',
+                      fontWeight: 600,
+                      boxShadow:  '0 0 14px rgba(255,222,0,0.25)',
+                    } : {
+                      background: '#2a1f3a',
+                      color:      '#e4e4e7',
+                      border:     '1px solid rgba(139,92,246,0.2)',
+                      borderLeft: '2px solid rgba(0,167,225,0.4)',
+                    }}
                   >
                     {msg.content}
                   </div>
@@ -497,7 +507,7 @@ export default function ChatPage() {
       </div>
 
       {/* ── Input bar ──────────────────────────────────────────────��───────── */}
-      <div className="sticky bottom-0 flex-shrink-0 bg-zinc-950/95 backdrop-blur-sm border-t border-zinc-900 px-4 py-3">
+      <div className="sticky bottom-0 flex-shrink-0 backdrop-blur-sm px-4 py-3" style={{ background: 'rgba(10,5,20,0.96)', borderTop: '1px solid rgba(139,92,246,0.18)' }}>
         <div className="max-w-lg mx-auto flex gap-2">
           <input
             type="text"
@@ -511,7 +521,8 @@ export default function ChatPage() {
               role === 'SELLER' && match.status === 'PENDING' ? 'Accept the request to chat…' :
               'Type a message…'
             }
-            className="flex-1 bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400/30 disabled:opacity-40 transition-all"
+            className="flex-1 text-white placeholder-zinc-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none disabled:opacity-40 transition-all"
+            style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)' }}
           />
           <button
             onClick={handleSend}
