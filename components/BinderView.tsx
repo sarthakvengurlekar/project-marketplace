@@ -251,15 +251,23 @@ export default function BinderView({
     setItems(typed)
     setLoading(false)
 
-    // Kick off price refresh for stale / missing cards
-    const toRefresh = typed.filter(item => {
-      const p = item.cards.card_prices?.[0]
-      return !p?.usd_price || isStale(p.last_fetched)
-    })
+    // Kick off price refresh for stale / missing cards.
+    // Use last_fetched as the sole gate so null-price cards with a recent
+    // last_fetched (bumped by refresh-price's 24h suppression) are not
+    // re-queried on every mount.
+    //
+    // Only process cards NOT already in-flight (not in refreshed.current).
+    // Using an additive merge (not replace) prevents a race where a second
+    // fetchCollection call re-adds already-handled IDs that would then be
+    // skipped by the refreshed.current guard — permanently blocking the total.
+    const toRefresh = typed
+      .filter(item => isStale(item.cards.card_prices?.[0]?.last_fetched ?? null))
+      .filter(item => !refreshed.current.has(item.cards.id))
+
     if (toRefresh.length === 0) return
 
-    const staleIds = new Set(toRefresh.map(i => i.cards.id))
-    setPriceLoadingIds(staleIds)
+    const newIds = new Set(toRefresh.map(i => i.cards.id))
+    setPriceLoadingIds(prev => new Set([...prev, ...newIds]))
 
     // Process in small batches to avoid hammering the upstream PPT API
     const BATCH = 3

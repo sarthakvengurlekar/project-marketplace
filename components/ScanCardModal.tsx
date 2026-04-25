@@ -215,8 +215,18 @@ export default function ScanCardModal({
 
       const marketPrice = extractMarketPrice(matchedCard)
       if (marketPrice != null) {
+        // Use fallback rates for INR/AED — refresh-price will overwrite with live rates
+        // when the card next goes stale (24h), but this ensures the total shows immediately.
+        const INR_RATE = 83.5
+        const AED_RATE = 3.67
         await supabase.from('card_prices').upsert(
-          { card_id: cardId, usd_price: marketPrice, last_fetched: new Date().toISOString() },
+          {
+            card_id:      cardId,
+            usd_price:    marketPrice,
+            inr_price:    Math.round(marketPrice * INR_RATE),
+            aed_price:    Math.round(marketPrice * AED_RATE * 100) / 100,
+            last_fetched: new Date().toISOString(),
+          },
           { onConflict: 'card_id' }
         )
       }

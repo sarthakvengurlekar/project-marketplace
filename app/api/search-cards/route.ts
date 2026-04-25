@@ -92,9 +92,11 @@ async function fetchFromPPT(
   params: Record<string, string>,
   apiKey: string,
   limit: number,
+  offset: number = 0,
 ): Promise<{ cards: PptCard[]; rateLimited: boolean }> {
   const RETRY_DELAYS = [0, 2000, 8000, 30000]
-  const qs = new URLSearchParams({ ...params, lightweight: 'true', limit: String(limit) }).toString()
+  const paginationParams = offset > 0 ? { offset: String(offset) } : {}
+  const qs = new URLSearchParams({ ...params, lightweight: 'true', limit: String(limit), ...paginationParams }).toString()
 
   for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
     if (RETRY_DELAYS[attempt] > 0) await sleep(RETRY_DELAYS[attempt])
@@ -166,6 +168,14 @@ async function upsertToCache(admin: any, cards: PptCard[], rates: typeof FALLBAC
   }
 }
 
+// PPT stores sets with abbreviated names (e.g. "ME03: Perfect Order") while our
+// chips display full names ("Mega Evolution—Perfect Order"). Strip everything up
+// to and including the em-dash so both the DB ilike and PPT setName match.
+function resolveSetTerm(name: string): string {
+  const idx = name.lastIndexOf('—')
+  return idx !== -1 ? name.slice(idx + 1).trim() : name
+}
+
 export async function GET(request: NextRequest) {
   const authClient = await createSupabaseServerClient()
   const { data: { user } } = await authClient.auth.getUser()
@@ -176,6 +186,9 @@ export async function GET(request: NextRequest) {
   const set    = (params.get('set') ?? '').trim()
   const offset = Math.max(0, parseInt(params.get('offset') ?? '0'))
   const limit  = Math.min(40, Math.max(1, parseInt(params.get('limit') ?? '20')))
+
+  // Resolve the searchable part of the set name for DB + PPT matching
+  const setTerm = set ? resolveSetTerm(set) : ''
 
   if (!q && !set) {
     return NextResponse.json({ error: 'search or set query required' }, { status: 400 })
@@ -208,8 +221,7 @@ export async function GET(request: NextRequest) {
     )
 
   if (set) {
-    // Set-specific: exact set match first, then ILIKE fallback
-    dbQuery = dbQuery.ilike('set_name', `%${set}%`)
+    dbQuery = dbQuery.ilike('set_name', `%${setTerm}%`)
   } else {
     // Name search: match name OR set_name
     dbQuery = dbQuery.or(`name.ilike.%${q}%,set_name.ilike.%${q}%`)
@@ -258,10 +270,10 @@ export async function GET(request: NextRequest) {
   }
 
   const pptParams: Record<string, string> = set
-    ? { setName: set, ...(q.trim() ? { search: q.trim() } : {}) }
+    ? { setName: setTerm, ...(q.trim() ? { search: q.trim() } : {}) }
     : { search: q }
 
-  const { cards: pptCards, rateLimited } = await fetchFromPPT(pptParams, apiKey, limit)
+  const { cards: pptCards, rateLimited } = await fetchFromPPT(pptParams, apiKey, limit, offset)
 
   // If rate limited, store the block
   if (rateLimited) {

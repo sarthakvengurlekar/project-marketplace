@@ -12,6 +12,7 @@ export interface PreviewCard {
   id: string
   condition: string | null
   is_foil: boolean
+  usd_price: number | null
   cards: {
     id: string
     name: string
@@ -134,24 +135,31 @@ function SellerCard({
             className="flex-shrink-0 w-[72px]"
             style={{ scrollSnapAlign: 'start' }}
           >
-            <div className="relative w-[72px] h-[100px] rounded-xl overflow-hidden" style={{ background: '#1a1028' }}>
-              {item.cards?.image_url && (
-                <Image
-                  src={item.cards.image_url}
-                  alt={item.cards.name ?? ''}
-                  fill
-                  sizes="72px"
-                  className="object-contain"
-                  unoptimized
-                />
-              )}
-            </div>
+            <Link href={`/binder/card/${encodeURIComponent(item.cards?.id ?? '')}`}>
+              <div className="relative w-[72px] h-[100px] rounded-xl overflow-hidden" style={{ background: '#1a1028' }}>
+                {item.cards?.image_url && (
+                  <Image
+                    src={item.cards.image_url}
+                    alt={item.cards.name ?? ''}
+                    fill
+                    sizes="72px"
+                    className="object-contain"
+                    unoptimized
+                  />
+                )}
+              </div>
+            </Link>
             <p className="text-[10px] text-zinc-400 mt-1 leading-tight line-clamp-1 text-center">
               {item.cards?.name}
             </p>
             {item.condition && (
               <p className={`text-[9px] font-bold text-center ${CONDITION_COLOURS[item.condition] ?? 'text-zinc-500'}`}>
                 {item.condition}
+              </p>
+            )}
+            {item.usd_price != null && (
+              <p className="text-[9px] font-bold text-center" style={{ color: '#FFDE00' }}>
+                ${item.usd_price.toFixed(2)}
               </p>
             )}
           </div>

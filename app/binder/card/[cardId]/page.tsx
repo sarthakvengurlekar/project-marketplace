@@ -198,7 +198,45 @@ export default function CardDetailPage() {
       supabase.from('card_prices').select('usd_price, inr_price, aed_price, last_fetched').eq('card_id', cardId).maybeSingle(),
     ])
 
-    if (!cardRes.data) { router.replace('/binder'); return }
+    if (!cardRes.data) {
+      // Card not in DB yet — check if add-cards page stored a preview in sessionStorage
+      const stored = typeof window !== 'undefined'
+        ? sessionStorage.getItem(`ppt_card_preview_${cardId}`)
+        : null
+      if (stored) {
+        try {
+          const p = JSON.parse(stored)
+          setCard({
+            id:                  cardId,
+            name:                p.name ?? '',
+            set_name:            p.setName ?? '',
+            card_number:         String(p.cardNumber ?? p.number ?? ''),
+            rarity:              p.rarity ?? null,
+            image_url:           p.imageCdnUrl200 ?? p.imageCdnUrl400 ?? p.imageUrl ?? p.image?.small ?? null,
+            image_url_hires:     p.imageCdnUrl800 ?? p.imageUrl ?? p.image?.large ?? null,
+            hp:                  p.hp != null ? String(p.hp) : null,
+            stage:               p.stage ?? null,
+            card_type:           p.cardType ?? null,
+            pokemon_type:        p.pokemonType ?? null,
+            energy_type:         p.energyType ?? null,
+            weakness:            p.weakness ?? null,
+            resistance:          p.resistance ?? null,
+            retreat_cost:        p.retreatCost != null ? String(p.retreatCost) : null,
+            attacks:             p.attacks ?? null,
+            flavor_text:         p.flavorText ?? null,
+            artist:              p.artist ?? null,
+            tcgplayer_url:       p.tcgPlayerUrl ?? null,
+            external_catalog_id: p.externalCatalogId ?? null,
+          })
+          if (p.prices?.market != null) {
+            setPrice({ usd: p.prices.market, inr: null, aed: null, lastFetched: null })
+          }
+          setLoading(false)
+          return
+        } catch { /* fall through to router.back */ }
+      }
+      router.back(); return
+    }
     setCard(cardRes.data as CardRow)
 
     if (priceRes.data) {

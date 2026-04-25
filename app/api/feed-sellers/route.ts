@@ -62,6 +62,16 @@ export async function GET() {
       .order('created_at', { ascending: false }),
   ])
 
+  // Bulk-fetch prices for all preview card IDs
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allCardIds = (cardsRes.data ?? []).map(c => (c.cards as any)?.id).filter(Boolean) as string[]
+  const { data: pricesData } = allCardIds.length > 0
+    ? await adminSupabase.from('card_prices').select('card_id, usd_price').in('card_id', allCardIds)
+    : { data: [] as Array<{ card_id: string; usd_price: number }> }
+
+  const priceMap: Record<string, number> = {}
+  for (const p of pricesData ?? []) priceMap[p.card_id] = p.usd_price
+
   // Group cards by seller
   const cardsByUser: Record<string, typeof cardsRes.data> = {}
   for (const card of cardsRes.data ?? []) {
@@ -84,11 +94,13 @@ export async function GET() {
     country_code: profile.country_code,
     trade_rating: profile.trade_rating ?? null,
     card_count:   countByUser[profile.id] ?? 0,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     preview_cards: (cardsByUser[profile.id] ?? []).slice(0, 8).map(c => ({
       id:        c.id,
       condition: c.condition ?? null,
       is_foil:   c.is_foil ?? false,
       cards:     c.cards ?? null,
+      usd_price: (c.cards as any)?.id ? (priceMap[(c.cards as any).id] ?? null) : null,
     })),
   }))
 

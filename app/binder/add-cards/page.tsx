@@ -96,16 +96,60 @@ function AddCardTile({
   onAdd: () => void
   countryCode: string
 }) {
+  const router = useRouter()
   const imageUrl = card.imageCdnUrl200 ?? card.imageUrl ?? card.image?.small ?? ''
   const usdPrice = card.prices?.market ?? null
   const localPrice = usdPrice != null ? formatPriceFromUSD(usdPrice, countryCode) : null
+  // Use tcgPlayerId if available; fall back to externalCatalogId for sets not on TCGPlayer
+  const rawId = card.tcgPlayerId ? String(card.tcgPlayerId) : (card.externalCatalogId ?? '')
+  const cardId = rawId
+
+  async function handleViewDetails() {
+    if (!cardId) return
+
+    // Store the full PPT card in sessionStorage so the detail page can display it
+    // even if the DB write hasn't completed yet (or fails for some reason).
+    sessionStorage.setItem(`ppt_card_preview_${cardId}`, JSON.stringify(card))
+
+    // Best-effort DB write — detail page will fall back to sessionStorage if this races
+    supabase.from('cards').upsert({
+      id:               cardId,
+      name:             card.name ?? '',
+      set_name:         card.setName ?? null,
+      set_code:         card.externalCatalogId ? card.externalCatalogId.split('-')[0] : null,
+      card_number:      String(card.cardNumber ?? card.number ?? ''),
+      rarity:           card.rarity ?? null,
+      image_url:        card.imageCdnUrl200 ?? card.imageCdnUrl400 ?? card.imageUrl ?? card.image?.small ?? null,
+      image_url_hires:  card.imageCdnUrl800 ?? card.imageUrl ?? card.image?.large ?? null,
+      tcgplayer_id:     card.tcgPlayerId ? String(card.tcgPlayerId) : null,
+      hp:               card.hp != null ? String(card.hp) : null,
+      stage:            card.stage ?? null,
+      card_type:        card.cardType ?? null,
+      pokemon_type:     card.pokemonType ?? null,
+      energy_type:      card.energyType ?? null,
+      weakness:         card.weakness ?? null,
+      resistance:       card.resistance ?? null,
+      retreat_cost:     card.retreatCost != null ? String(card.retreatCost) : null,
+      attacks:          card.attacks ?? null,
+      flavor_text:      card.flavorText ?? null,
+      artist:           card.artist ?? null,
+      tcgplayer_url:    card.tcgPlayerUrl ?? null,
+    }, { onConflict: 'id' }).then(({ error }) => {
+      if (error) console.warn('[add-cards] card upsert failed:', error.message)
+    })
+
+    router.push(`/binder/card/${encodeURIComponent(cardId)}`)
+  }
 
   return (
-    <div className="holo-card rounded-2xl overflow-hidden relative group" style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}>
-
-      {/* + Add button */}
+    <div
+      onClick={handleViewDetails}
+      className="holo-card rounded-2xl overflow-hidden relative group cursor-pointer"
+      style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}
+    >
+      {/* + Add button — stops propagation so it doesn't navigate to detail */}
       <button
-        onClick={onAdd}
+        onClick={e => { e.stopPropagation(); onAdd() }}
         disabled={addState !== 'idle'}
         className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full flex items-center justify-center transition-all"
         style={{
@@ -641,7 +685,11 @@ export default function AddCardsPage() {
           </div>
         ) : displayCards.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#52525b', fontSize: 14 }}>
-            {isSearch ? `No cards found for "${query}"` : 'No cards available'}
+            {isSearch
+            ? (activeSet && !query.trim()
+                ? `No cards found in "${activeSet}"`
+                : `No cards found for "${query}"`)
+            : 'No cards available'}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
