@@ -279,8 +279,12 @@ export default function BinderView({
           if (refreshed.current.has(cid)) return
           refreshed.current.add(cid)
 
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 15_000)
+
           try {
-            const res = await fetch(`/api/refresh-price?card_id=${encodeURIComponent(cid)}`)
+            const res = await fetch(`/api/refresh-price?card_id=${encodeURIComponent(cid)}`, { signal: controller.signal })
+            clearTimeout(timeoutId)
             if (!res.ok) return
             const { usd_price, inr_price, aed_price, last_fetched } = await res.json()
 
@@ -297,7 +301,10 @@ export default function BinderView({
                     }
               )
             )
+          } catch {
+            // AbortError (timeout) or network error — fall through to finally
           } finally {
+            clearTimeout(timeoutId)
             setPriceLoadingIds(prev => {
               const next = new Set(prev)
               next.delete(cid)
@@ -333,7 +340,7 @@ export default function BinderView({
     // fall back to client-side conversion when pre-computed price is missing
     return sum + convertFromUSD(p?.usd_price ?? 0, countryCode)
   }, 0)
-  const pricesStillLoading = priceLoadingIds.size > 0 || !countryReady
+  const pricesUpdating = priceLoadingIds.size > 0
 
   return (
     <main
@@ -374,14 +381,17 @@ export default function BinderView({
             style={{ background: 'linear-gradient(135deg, #1e1035, #160e20)', border: '1px solid rgba(255,222,0,0.2)', boxShadow: '0 0 30px rgba(124,83,140,0.15)' }}
           >
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
-              {pricesStillLoading ? 'Updating prices…' : 'Total collection value'}
+              Total collection value
             </p>
-            {pricesStillLoading ? (
+            {!countryReady ? (
               <div className="h-8 w-36 bg-zinc-800 rounded-lg animate-pulse" />
             ) : (
               <p className="text-3xl font-black tracking-tight text-gradient-pika">
                 {formatPrice(totalLocal, countryCode)}
               </p>
+            )}
+            {pricesUpdating && countryReady && (
+              <p className="text-zinc-500 text-[10px] mt-1">Updating prices…</p>
             )}
             <p className="text-zinc-600 text-[10px] mt-2 leading-relaxed">
               Prices based on US market rates. Actual trade value may vary.
