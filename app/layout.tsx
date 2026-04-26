@@ -24,7 +24,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${poppins.variable} font-poppins bg-zinc-950 text-white antialiased`}>
+      <body className={`${poppins.variable} font-poppins antialiased`} style={{ background: '#FAF6EC', color: '#0A0A0A' }}>
         <CountryProvider>
           {children}
           <BottomNav />

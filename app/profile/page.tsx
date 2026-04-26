@@ -62,14 +62,14 @@ function EditProfileModal({
   onSaved: (updated: Partial<Profile>) => void
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [username, setUsername]     = useState(profile.username)
-  const [bio, setBio]               = useState(profile.bio ?? '')
-  const [country, setCountry]       = useState(profile.country_code)
-  const [city, setCity]             = useState(profile.city ?? '')
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [username,      setUsername]      = useState(profile.username)
+  const [bio,           setBio]           = useState(profile.bio ?? '')
+  const [country,       setCountry]       = useState(profile.country_code)
+  const [city,          setCity]          = useState(profile.city ?? '')
+  const [avatarFile,    setAvatarFile]    = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
-  const [saving, setSaving]         = useState(false)
-  const [error, setError]           = useState<string | null>(null)
+  const [saving,        setSaving]        = useState(false)
+  const [error,         setError]         = useState<string | null>(null)
 
   function handleCountryChange(code: string) {
     setCountry(code)
@@ -127,89 +127,83 @@ function EditProfileModal({
     }
   }
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box',
+    background: '#FAF6EC', border: '2px solid #0A0A0A',
+    color: '#0A0A0A', fontSize: 14, padding: '10px 14px',
+    outline: 'none',
+  }
+
   return (
     <>
-      <div onClick={onClose} className="fixed inset-0 bg-black/70 z-50 backdrop-blur-sm" />
-      <div
-        className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-sm mx-auto rounded-3xl overflow-hidden shadow-2xl max-h-[85vh] flex flex-col"
-        style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.3)' }}
-      >
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(10,10,10,0.65)', zIndex: 50 }} />
+      <div style={{
+        position: 'fixed', inset: '0 16px', top: '50%', transform: 'translateY(-50%)',
+        zIndex: 50, maxWidth: 440, margin: '0 auto',
+        background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A',
+        maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+      }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ borderBottom: '1px solid rgba(139,92,246,0.2)' }}>
-          <h2 className="text-white font-black text-base">Edit Profile</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-white text-sm" style={{ background: '#2a1f3a' }}>✕</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '2px solid #0A0A0A', flexShrink: 0 }}>
+          <h2 style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16, margin: 0 }}>Edit Profile</h2>
+          <button onClick={onClose} style={{ background: '#0A0A0A', border: 'none', color: '#FAF6EC', width: 28, height: 28, cursor: 'pointer', fontWeight: 900, fontSize: 12 }}>✕</button>
         </div>
 
-        <div className="overflow-y-auto flex-1 p-5 space-y-4">
+        <div style={{ overflowY: 'auto', flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Avatar */}
-          <div className="flex flex-col items-center gap-3">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-yellow-400/50 hover:border-yellow-400 transition-colors"
+              style={{ position: 'relative', width: 72, height: 72, border: '2px solid #0A0A0A', boxShadow: '2px 2px 0 #0A0A0A', overflow: 'hidden', cursor: 'pointer', background: '#F4D03F' }}
             >
               {(avatarPreview ?? profile.avatar_url) ? (
-                <Image
-                  src={avatarPreview ?? profile.avatar_url!}
-                  alt="Avatar"
-                  fill
-                  className="object-cover"
-                  unoptimized
-                />
+                <Image src={avatarPreview ?? profile.avatar_url!} alt="Avatar" fill className="object-cover" unoptimized />
               ) : (
-                <div className="w-full h-full bg-zinc-800 flex items-center justify-center text-2xl">
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 900 }}>
                   {profile.username[0]?.toUpperCase()}
                 </div>
               )}
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                <span className="text-lg">📷</span>
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                📷
               </div>
             </button>
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
           </div>
 
           {/* Username */}
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wide mb-1.5">Username</label>
-            <input
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              maxLength={30}
-              className="w-full rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none transition-colors"
-              style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)' }}
-            />
+            <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Username</label>
+            <input value={username} onChange={e => setUsername(e.target.value)} maxLength={30} style={inputStyle} />
           </div>
 
           {/* Bio */}
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wide mb-1.5">Bio</label>
+            <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Bio</label>
             <textarea
-              value={bio}
-              onChange={e => setBio(e.target.value)}
-              maxLength={160}
-              rows={3}
+              value={bio} onChange={e => setBio(e.target.value)} maxLength={160} rows={3}
               placeholder="Tell traders about yourself..."
-              className="w-full rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none transition-colors resize-none placeholder:text-zinc-600"
-              style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)' }}
+              style={{ ...inputStyle, resize: 'none' } as React.CSSProperties}
             />
-            <p className="text-right text-[10px] text-zinc-600 mt-1">{bio.length}/160</p>
+            <p style={{ textAlign: 'right', fontSize: 10, color: '#8B7866', margin: '4px 0 0' }}>{bio.length}/160</p>
           </div>
 
           {/* Country */}
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wide mb-1.5">Country</label>
-            <div className="flex gap-2">
+            <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Country</label>
+            <div style={{ display: 'flex', gap: 8 }}>
               {COUNTRY_OPTIONS.map(c => (
                 <button
                   key={c.code}
                   onClick={() => handleCountryChange(c.code)}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors"
-                  style={country === c.code
-                    ? { background: 'rgba(255,222,0,0.1)', border: '1px solid #FFDE00', color: '#FFDE00' }
-                    : { background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)', color: '#a1a1aa' }
-                  }
+                  style={{
+                    flex: 1, padding: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    background: country === c.code ? '#F4D03F' : '#FAF6EC',
+                    border: '2px solid #0A0A0A',
+                    boxShadow: country === c.code ? '2px 2px 0 #0A0A0A' : 'none',
+                    fontWeight: 800, fontSize: 13, cursor: 'pointer', color: '#0A0A0A',
+                  }}
                 >
-                  <span>{c.flag}</span>
-                  <span>{c.name}</span>
+                  <span>{c.flag}</span><span>{c.name}</span>
                 </button>
               ))}
             </div>
@@ -218,41 +212,29 @@ function EditProfileModal({
           {/* City */}
           {country && (
             <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wide mb-1.5">City</label>
-              <select
-                value={city}
-                onChange={e => setCity(e.target.value)}
-                className="w-full rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none transition-colors"
-              style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)' }}
-              >
+              <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>City</label>
+              <select value={city} onChange={e => setCity(e.target.value)} style={{ ...inputStyle, appearance: 'none' } as React.CSSProperties}>
                 <option value="">Select city…</option>
-                {(CITIES[country] ?? []).map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
+                {(CITIES[country] ?? []).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           )}
 
           {error && (
-            <p className="text-red-400 text-sm text-center bg-red-400/10 rounded-xl px-4 py-2">{error}</p>
+            <p style={{ color: '#E8233B', fontSize: 13, fontWeight: 700, padding: '8px 12px', border: '1.5px solid #E8233B', background: 'rgba(232,35,59,0.06)' }}>{error}</p>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 space-y-2 flex-shrink-0" style={{ borderTop: '1px solid rgba(139,92,246,0.2)' }}>
+        <div style={{ padding: '12px 16px', borderTop: '2px solid #0A0A0A', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="w-full disabled:opacity-50 text-black font-black rounded-xl py-3 text-sm tracking-wide transition-all"
-            style={{ background: 'linear-gradient(135deg, #FFDE00, #F4C430)', boxShadow: '0 0 18px rgba(255,222,0,0.35)' }}
+            style={{ width: '100%', padding: '12px 0', background: '#E8233B', border: '2px solid #0A0A0A', boxShadow: saving ? 'none' : '3px 3px 0 #0A0A0A', color: '#FAF6EC', fontWeight: 900, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}
           >
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
-          <button
-            onClick={onClose}
-            className="w-full text-zinc-300 font-bold rounded-xl py-2.5 text-sm transition-colors"
-            style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.2)' }}
-          >
+          <button onClick={onClose} style={{ width: '100%', padding: '10px 0', background: 'none', border: '2px solid #0A0A0A', color: '#0A0A0A', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
             Cancel
           </button>
         </div>
@@ -266,15 +248,11 @@ function EditProfileModal({
 function ProfileSkeleton() {
   return (
     <div className="animate-pulse">
-      <div className="h-36 bg-zinc-800 rounded-none" />
-      <div className="flex flex-col items-center -mt-12 px-5 pb-5">
-        <div className="w-24 h-24 rounded-full bg-zinc-700 border-4 border-zinc-950 mb-3" />
-        <div className="h-5 w-36 bg-zinc-700 rounded-full mb-2" />
-        <div className="h-3 w-24 bg-zinc-800 rounded-full" />
-      </div>
-      <div className="px-4 space-y-3">
-        <div className="h-20 bg-zinc-900 rounded-2xl" />
-        <div className="h-28 bg-zinc-900 rounded-2xl" />
+      <div style={{ height: 120, background: '#e8e2d4' }} />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: -36, paddingBottom: 20, gap: 10 }}>
+        <div style={{ width: 72, height: 72, background: '#e8e2d4', border: '2px solid #0A0A0A' }} />
+        <div style={{ width: 120, height: 14, background: '#e8e2d4', borderRadius: 2 }} />
+        <div style={{ width: 80, height: 10, background: '#e8e2d4', borderRadius: 2 }} />
       </div>
     </div>
   )
@@ -286,11 +264,11 @@ export default function ProfilePage() {
   const router = useRouter()
   const { setCountryCode } = useCountry()
 
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [stats, setStats]     = useState<Stats | null>(null)
+  const [profile,      setProfile]      = useState<Profile | null>(null)
+  const [stats,        setStats]        = useState<Stats | null>(null)
   const [previewCards, setPreviewCards] = useState<PreviewCard[]>([])
-  const [loading, setLoading] = useState(true)
-  const [editOpen, setEditOpen] = useState(false)
+  const [loading,      setLoading]      = useState(true)
+  const [editOpen,     setEditOpen]     = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -318,235 +296,258 @@ export default function ProfilePage() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen" style={{ background: '#0a0514' }}>
-        <ProfileSkeleton />
-      </div>
-    )
+    return <div style={{ minHeight: '100vh', background: '#FAF6EC' }}><ProfileSkeleton /></div>
   }
 
   if (!profile || !stats) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0a0514' }}>
-        <p className="text-zinc-500 text-sm">Failed to load profile.</p>
+      <div style={{ minHeight: '100vh', background: '#FAF6EC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: '#8B7866', fontSize: 14 }}>Failed to load profile.</p>
       </div>
     )
   }
 
-  const countryCode  = profile.country_code
-  const flag         = FLAGS[countryCode] ?? ''
-  const isBuyer      = profile.roles?.includes('buy')
-  const isSeller     = profile.roles?.includes('sell')
+  const countryCode   = profile.country_code
+  const flag          = FLAGS[countryCode] ?? ''
   const collectionVal = formatPrice(stats.collection_value_local, countryCode)
   const ratingDisplay = stats.avg_rating != null ? stats.avg_rating.toFixed(1) : '—'
+  const initials      = profile.username[0]?.toUpperCase() ?? '?'
+
+  // Approximate badge unlock states
+  const earlyAdopter = true
+  const foilCards    = previewCards.filter(c => c.is_foil).length
+  const foilHunter   = foilCards >= 1
 
   return (
-    <div className="min-h-screen pb-28" style={{ background: 'radial-gradient(ellipse at 50% -10%, #2d1060 0%, #1a0830 40%, #0a0514 100%)' }}>
+    <div className="min-h-screen pb-28" style={{ background: '#FAF6EC' }}>
 
-      {/* ── Header banner ───────────────────────────────────────────────── */}
-      <div className="relative">
-        {/* Pokemon sky gradient banner */}
-        <div
-          className="h-36"
-          style={{ background: 'linear-gradient(135deg, #0a0514 0%, #2d1060 35%, #7c3a00 72%, #ff6b35 100%)' }}
-        />
+      {/* ── Header banner (diagonal stripe) ─────────────────────────────── */}
+      <div style={{ position: 'relative' }}>
+        <div style={{
+          height: 120,
+          background: '#E8233B',
+          backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(244,208,63,0.55) 12px, rgba(244,208,63,0.55) 22px)',
+        }} />
 
-        {/* Edit button top-right */}
+        {/* EDIT button */}
         <button
           onClick={() => setEditOpen(true)}
-          className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 bg-black/40 hover:bg-black/60 backdrop-blur-sm border border-white/10 rounded-full text-white text-xs font-semibold transition-colors"
+          style={{
+            position:   'absolute',
+            top:        12,
+            right:      12,
+            background: '#FAF6EC',
+            border:     '2px solid #0A0A0A',
+            boxShadow:  '2px 2px 0 #0A0A0A',
+            color:      '#0A0A0A',
+            fontWeight: 900,
+            fontSize:   11,
+            padding:    '5px 12px',
+            cursor:     'pointer',
+            letterSpacing: '0.05em',
+          }}
         >
-          <span className="text-xs">✏️</span> Edit
+          EDIT
+        </button>
+      </div>
+
+      {/* ── Avatar + name ────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: -40, paddingBottom: 16, paddingLeft: 16, paddingRight: 16 }}>
+        <button onClick={() => setEditOpen(true)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+          <div style={{
+            width:      80,
+            height:     80,
+            background: '#F4D03F',
+            border:     '3px solid #0A0A0A',
+            boxShadow:  '3px 3px 0 #0A0A0A',
+            overflow:   'hidden',
+            position:   'relative',
+            display:    'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            {profile.avatar_url ? (
+              <Image src={profile.avatar_url} alt={profile.username} fill className="object-cover" unoptimized />
+            ) : (
+              <span style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 32 }}>{initials}</span>
+            )}
+          </div>
         </button>
 
-        {/* Avatar — overlaps banner */}
-        <div className="flex flex-col items-center px-5 -mt-12 pb-4">
-          <button onClick={() => setEditOpen(true)} className="relative mb-3 group">
-            {/* Championship belt ring */}
-            <div
-              className="rounded-full p-[3px]"
-              style={{ background: 'linear-gradient(135deg, #FFDE00, #FF6B35, #EE1515, #7C538C, #FFDE00)', boxShadow: '0 0 20px rgba(255,222,0,0.4)' }}
-            >
-            <div className="w-24 h-24 rounded-full overflow-hidden bg-zinc-800 shadow-xl" style={{ border: '3px solid #0a0514' }}>
-              {profile.avatar_url ? (
-                <Image
-                  src={profile.avatar_url}
-                  alt={profile.username}
-                  width={96}
-                  height={96}
-                  className="object-cover w-full h-full"
-                  unoptimized
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-4xl font-black text-zinc-400">
-                  {profile.username[0]?.toUpperCase()}
-                </div>
-              )}
-            </div>
-            </div>{/* end championship ring */}
-            {/* Camera overlay */}
-            <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-colors">
-              <span className="text-white text-xl opacity-0 group-hover:opacity-100 transition-opacity">📷</span>
-            </div>
-            {/* Small camera badge */}
-            <div
-              className="absolute bottom-0 right-0 w-7 h-7 rounded-full flex items-center justify-center text-xs shadow-md"
-              style={{ background: 'linear-gradient(135deg, #FFDE00, #F4C430)', border: '2px solid #0a0514' }}
-            >
-              📷
-            </div>
-          </button>
+        <h1 style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 22, margin: '12px 0 4px', letterSpacing: '-0.02em' }}>
+          {profile.username}
+        </h1>
 
-          {/* Name */}
-          <h1 className="text-white font-black text-2xl tracking-tight leading-none mb-1">
-            {profile.username}
-          </h1>
-
-          {/* Location */}
-          {(profile.city || countryCode) && (
-            <p className="text-zinc-400 text-sm mb-3">
-              {flag} {[profile.city, COUNTRIES[countryCode]?.name].filter(Boolean).join(', ')}
-            </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <span style={{
+            background: '#F4D03F', color: '#0A0A0A', border: '1.5px solid #0A0A0A',
+            fontSize: 9, fontWeight: 900, padding: '2px 7px', letterSpacing: '0.05em',
+          }}>
+            PRO
+          </span>
+          {flag && <span style={{ fontSize: 16 }}>{flag}</span>}
+          {(profile.city || COUNTRIES[countryCode]?.name) && (
+            <span style={{ color: '#8B7866', fontSize: 13 }}>
+              {[profile.city, COUNTRIES[countryCode]?.name].filter(Boolean).join(', ')}
+            </span>
           )}
+        </div>
 
-          {/* Role badges */}
-          <div className="flex gap-2">
-            {isBuyer && (
-              <span className="px-3 py-1 bg-blue-500/15 border border-blue-500/30 text-blue-400 text-xs font-bold rounded-full">
-                🛒 Buyer
-              </span>
-            )}
-            {isSeller && (
-              <span className="px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-full">
-                🏷️ Seller
-              </span>
-            )}
-          </div>
+      </div>
+
+      {/* ── Stats grid ───────────────────────────────────────────────────── */}
+      <div style={{ padding: '0 16px 16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', border: '2px solid #0A0A0A', overflow: 'hidden' }}>
+          {[
+            { label: 'CARDS',  value: stats.card_count.toLocaleString() },
+            { label: 'VALUE',  value: collectionVal, red: true },
+            { label: 'TRADES', value: stats.trade_count.toLocaleString() },
+            { label: 'RATING', value: `${ratingDisplay}` },
+          ].map((s, i, arr) => (
+            <div
+              key={s.label}
+              style={{
+                padding:     '12px 8px',
+                textAlign:   'center',
+                background:  '#0A0A0A',
+                borderRight: i < arr.length - 1 ? '2px solid #FAF6EC' : 'none',
+              }}
+            >
+              <p style={{ color: s.red ? '#E8233B' : '#FAF6EC', fontWeight: 900, fontSize: 15, margin: 0, lineHeight: 1.2 }}>{s.value}</p>
+              <p style={{ color: '#8B7866', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '4px 0 0' }}>{s.label}</p>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* ── Stats row ───────────────────────────────────────────────────── */}
-      <div className="px-4 mb-4">
+      {/* ── Badges ───────────────────────────────────────────────────────── */}
+      <div style={{ padding: '0 16px 16px' }}>
+        <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>
+          BADGES
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          {[
+            {
+              icon: '⚙',
+              name: 'Early adopter',
+              sub: 'Apr 2026',
+              unlocked: earlyAdopter,
+              bg: '#F4D03F',
+            },
+            {
+              icon: '★',
+              name: 'Foil hunter',
+              sub: `${foilCards} of 7 foil`,
+              unlocked: foilHunter,
+              bg: '#FAF6EC',
+            },
+            {
+              icon: '○',
+              name: 'First trade',
+              sub: 'Locked',
+              unlocked: stats.trade_count > 0,
+              bg: '#FAF6EC',
+            },
+          ].map(badge => (
+            <div
+              key={badge.name}
+              style={{
+                background:  badge.unlocked ? badge.bg : '#FAF6EC',
+                border:      '2px solid #0A0A0A',
+                boxShadow:   badge.unlocked ? '2px 2px 0 #0A0A0A' : 'none',
+                padding:     '10px 10px 8px',
+                opacity:     badge.unlocked ? 1 : 0.5,
+              }}
+            >
+              <span style={{ fontSize: 16, display: 'block', marginBottom: 6, color: '#0A0A0A' }}>{badge.icon}</span>
+              <p style={{ color: '#0A0A0A', fontWeight: 800, fontSize: 12, margin: 0, lineHeight: 1.3 }}>{badge.name}</p>
+              <p style={{ color: '#8B7866', fontSize: 10, margin: '3px 0 0' }}>{badge.sub}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── My Collection ────────────────────────────────────────────────── */}
+      <div style={{ padding: '0 16px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 }}>
+            MY COLLECTION
+          </p>
+          <Link href="/binder" style={{ color: '#E8233B', fontWeight: 800, fontSize: 12, textDecoration: 'none' }}>
+            VIEW ALL →
+          </Link>
+        </div>
+
         <div
-          className="grid grid-cols-4 rounded-2xl overflow-hidden"
-          style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}
+          style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none' } as React.CSSProperties}
         >
-          {[
-            { label: 'Cards',  value: stats.card_count.toLocaleString(), color: '#FFDE00' },
-            { label: 'Value',  value: collectionVal,                      color: '#FF6B35' },
-            { label: 'Trades', value: stats.trade_count.toLocaleString(), color: '#00A7E1' },
-            { label: 'Rating', value: `${ratingDisplay}${stats.avg_rating != null ? ' ★' : ''}`, color: '#F4C430' },
-          ].map((stat, i, arr) => (
-            <div
-              key={stat.label}
-              className="flex flex-col items-center py-4"
-              style={{ borderRight: i < arr.length - 1 ? '1px solid rgba(139,92,246,0.15)' : 'none' }}
-            >
-              <span className="font-black text-base leading-none mb-1" style={{ color: stat.color }}>{stat.value}</span>
-              <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wide">{stat.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Bio ─────────────────────────────────────────────────────────── */}
-      <div className="px-4 mb-4">
-        <div className="rounded-2xl p-4" style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-wide">Bio</h3>
-            <button
-              onClick={() => setEditOpen(true)}
-              className="text-zinc-500 hover:text-yellow-400 transition-colors text-xs flex items-center gap-1"
-            >
-              ✏️ <span>Edit</span>
-            </button>
-          </div>
-          {profile.bio ? (
-            <p className="text-zinc-300 text-sm leading-relaxed">{profile.bio}</p>
-          ) : (
-            <p className="text-zinc-600 text-sm italic">
-              Add a bio to tell traders about yourself
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ── Collection preview ──────────────────────────────────────────── */}
-      <div className="px-4 mb-4">
-        <div className="rounded-2xl overflow-hidden" style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}>
-          <div className="flex items-center justify-between px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
-            <h3 className="text-white font-black text-sm">My Collection</h3>
-            <Link
-              href="/binder"
-              className="text-yellow-400 text-xs font-bold hover:text-yellow-300 transition-colors"
-            >
-              View All →
-            </Link>
-          </div>
-
           {previewCards.length === 0 ? (
-            <div className="py-8 text-center text-zinc-600 text-sm">No cards yet</div>
+            <p style={{ color: '#8B7866', fontSize: 13, fontStyle: 'italic' }}>No cards yet</p>
           ) : (
-            <div className="flex gap-3 overflow-x-auto px-4 py-3 scrollbar-none" style={{ WebkitOverflowScrolling: 'touch' }}>
-              {previewCards.map(uc => (
-                <Link key={uc.id} href="/binder" className="flex-shrink-0">
-                  <div className="w-20 rounded-xl overflow-hidden" style={{ aspectRatio: '2.5/3.5', background: '#1a1028', border: '1px solid rgba(139,92,246,0.2)' }}>
-                    {uc.cards?.image_url ? (
-                      <Image
-                        src={uc.cards.image_url}
-                        alt={uc.cards.name}
-                        width={80}
-                        height={112}
-                        className="w-full h-full object-contain"
-                        style={{ transform: 'none' }}
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-xl text-zinc-600">🃏</div>
-                    )}
-                  </div>
-                  {uc.is_foil && (
-                    <p className="text-[9px] text-yellow-400 font-bold text-center mt-0.5">✨ Foil</p>
+            previewCards.map(uc => (
+              <Link key={uc.id} href="/binder" style={{ textDecoration: 'none', flexShrink: 0 }}>
+                <div style={{
+                  width: 60, aspectRatio: '2.5/3.5',
+                  background: '#f0ece2', border: '2px solid #0A0A0A',
+                  position: 'relative', overflow: 'hidden',
+                }}>
+                  {uc.cards?.image_url ? (
+                    <Image
+                      src={uc.cards.image_url}
+                      alt={uc.cards.name}
+                      fill
+                      sizes="60px"
+                      className="object-contain"
+                      unoptimized
+                    />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, opacity: 0.3 }}>🃏</div>
                   )}
-                </Link>
-              ))}
-            </div>
+                </div>
+              </Link>
+            ))
           )}
         </div>
       </div>
 
-      {/* ── Settings ────────────────────────────────────────────────────── */}
-      <div className="px-4 mb-4">
-        <div className="rounded-2xl overflow-hidden" style={{ background: '#160e20', border: '1px solid rgba(139,92,246,0.2)' }}>
-          {[
-            { icon: '🔔', label: 'Notification Preferences' },
-            { icon: '❓', label: 'Help & Support' },
-            { icon: '📤', label: 'Share App' },
-          ].map((item, i, arr) => (
-            <button
-              key={item.label}
-              className="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors"
-              style={{ borderBottom: i < arr.length - 1 ? '1px solid rgba(139,92,246,0.12)' : 'none' }}
-            >
-              <span className="text-lg w-7 text-center">{item.icon}</span>
-              <span className="flex-1 text-zinc-300 text-sm font-medium">{item.label}</span>
-              <span className="text-zinc-600 text-xs">›</span>
-            </button>
-          ))}
+      {/* ── Notifications row ────────────────────────────────────────────── */}
+      <div style={{ padding: '0 16px 16px' }}>
+        <div style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #E8233B' }}>
+          <button
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 18, flexShrink: 0 }}>🔔</span>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 14, margin: 0 }}>Notifications</p>
+              <p style={{ color: '#8B7866', fontSize: 11, margin: '2px 0 0' }}>3 enabled</p>
+            </div>
+            <span style={{ color: '#8B7866', fontSize: 16 }}>›</span>
+          </button>
         </div>
       </div>
 
-      {/* ── Sign out ────────────────────────────────────────────────────── */}
-      <div className="px-4">
+      {/* ── Sign out ─────────────────────────────────────────────────────── */}
+      <div style={{ padding: '0 16px' }}>
         <button
           onClick={handleSignOut}
-          className="w-full bg-red-500/10 hover:bg-red-500/20 active:bg-red-500/25 border border-red-500/20 hover:border-red-500/40 text-red-400 font-black rounded-2xl py-4 text-sm tracking-wide transition-colors"
+          style={{
+            width:      '100%',
+            padding:    '14px 0',
+            background: '#FAF6EC',
+            border:     '2px solid #0A0A0A',
+            color:      '#E8233B',
+            fontWeight: 900,
+            fontSize:   13,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            cursor:     'pointer',
+          }}
         >
           Sign Out
         </button>
       </div>
 
-      {/* ── Edit modal ──────────────────────────────────────────────────── */}
+      {/* ── Edit modal ───────────────────────────────────────────────────── */}
       {editOpen && (
         <EditProfileModal
           profile={profile}

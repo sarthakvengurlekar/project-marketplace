@@ -2,20 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Cherry & Ink design tokens ─────────────────────────────── */
 :root {
-  --background: #0a0514;
-  --foreground: #fafafa;
-  --pika:   #FFDE00;
-  --char:   #FF6B35;
-  --squirt: #00A7E1;
-  --bulba:  #78C850;
-  --gengar: #7C538C;
-  --ball:   #EE1515;
+  --cream:  #FAF6EC;
+  --red:    #E8233B;
+  --black:  #0A0A0A;
+  --yellow: #F4D03F;
+  --gray:   #8B7866;
+
+  --border: 2px solid #0A0A0A;
+  --shadow: 4px 4px 0 #0A0A0A;
+  --shadow-red: 4px 4px 0 #E8233B;
+  --shadow-cta: 5px 5px 0 #0A0A0A;
 }
 
 body {
-  color: var(--foreground);
-  background: #0a0514;
+  color: #0A0A0A;
+  background: #FAF6EC;
   font-family: var(--font-poppins), 'Poppins', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -23,74 +26,70 @@ body {
 @layer utilities {
   .text-balance { text-wrap: balance; }
 
-  /* Gradient text */
-  .text-gradient-pika {
-    background: linear-gradient(135deg, #FFDE00 0%, #FF6B35 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+  /* Card ink style — the standard raised card */
+  .ink-card {
+    background: #FAF6EC;
+    border: 2px solid #0A0A0A;
+    box-shadow: 4px 4px 0 #0A0A0A;
   }
-  .text-gradient-purple {
-    background: linear-gradient(135deg, #9C6BA6 0%, #00A7E1 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+  .ink-card-red {
+    background: #FAF6EC;
+    border: 2px solid #0A0A0A;
+    box-shadow: 4px 4px 0 #E8233B;
   }
 
-  /* Holographic card tile — subtle rainbow ring + lift on hover */
+  /* Holo lift on hover — keeps the ink-card feel */
   .holo-card {
-    transition: box-shadow 0.25s ease, transform 0.2s ease;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
   .holo-card:hover {
-    transform: translateY(-2px);
-    box-shadow:
-      0 0 0 1.5px rgba(255,222,0,0.4),
-      0 0 20px  rgba(255,222,0,0.18),
-      0 0 40px  rgba(124,83,140,0.12),
-      0 10px 28px rgba(0,0,0,0.45);
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0 #0A0A0A;
   }
 
-  /* Animated foil badge */
+  /* Price text in cherry red */
+  .text-price { color: #E8233B; }
+
+  /* Gradient text (legacy — kept for any remaining uses) */
+  .text-gradient-pika {
+    color: #E8233B;
+  }
+
+  /* Foil badge — butter yellow with black text */
   .foil-badge {
-    background: linear-gradient(135deg, #FFDE00, #FF6B35, #EE1515, #7C538C, #00A7E1, #78C850, #FFDE00);
-    background-size: 250% 250%;
-    animation: holoShift 2.5s linear infinite;
-    color: #000 !important;
-    border: none !important;
+    background: #F4D03F;
+    color: #0A0A0A;
+    border: 1.5px solid #0A0A0A;
+    box-shadow: 2px 2px 0 #0A0A0A;
+    font-weight: 800;
   }
 
-  /* Condition badge glows */
-  .badge-nm { box-shadow: 0 0 9px rgba(20,184,166,0.6); }
-  .badge-lp { box-shadow: 0 0 9px rgba(59,130,246,0.6); }
-  .badge-mp { box-shadow: 0 0 9px rgba(249,115,22,0.6); }
-  .badge-hp { box-shadow: 0 0 12px rgba(239,68,68,0.7); }
+  /* Condition badges */
+  .badge-nm { border: 1.5px solid #0A0A0A; }
+  .badge-lp { border: 1.5px solid #0A0A0A; }
+  .badge-mp { border: 1.5px solid #0A0A0A; }
+  .badge-hp { border: 1.5px solid #0A0A0A; }
 
-  /* Grade badge glows */
-  .glow-psa { box-shadow: 0 0 10px rgba(220,38,38,0.6),  0 0 22px rgba(220,38,38,0.2);  }
-  .glow-bgs { box-shadow: 0 0 10px rgba(217,119,6,0.6),  0 0 22px rgba(217,119,6,0.2);  }
-  .glow-cgc { box-shadow: 0 0 10px rgba(37,99,235,0.6),  0 0 22px rgba(37,99,235,0.2);  }
-  .glow-tag { box-shadow: 0 0 10px rgba(124,83,140,0.65),0 0 22px rgba(124,83,140,0.25);}
+  /* Grade badge */
+  .glow-psa { background: #E8233B; color: #fff; }
+  .glow-bgs { background: #F4D03F; color: #0A0A0A; }
+  .glow-cgc { background: #0A0A0A; color: #fff; }
+  .glow-tag { background: #8B7866; color: #fff; }
 
-  /* Status badge glows */
-  .badge-pending { box-shadow: 0 0 8px rgba(255,222,0,0.5); }
-  .badge-active  { box-shadow: 0 0 8px rgba(52,211,153,0.5); }
+  /* Status badges */
+  .badge-pending { border: 1.5px solid #F4D03F; }
+  .badge-active  { border: 1.5px solid #0A0A0A; }
 
   /* Scrollbar hide */
   .scrollbar-none::-webkit-scrollbar { display: none; }
   .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
-@keyframes holoShift {
-  0%   { background-position: 0%   50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0%   50%; }
+@keyframes acSpin {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes navBadgePulse {
   0%,  100% { transform: scale(1.0); }
   50%        { transform: scale(1.15); }
-}
-
-@keyframes acSpin {
-  to { transform: rotate(360deg); }
 }

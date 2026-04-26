@@ -31,8 +31,9 @@ export default function MyBinderPage() {
 
   if (checking) {
     return (
-      <main className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+      <main className="min-h-screen flex items-center justify-center" style={{ background: '#FAF6EC' }}>
+        <div style={{ width: 32, height: 32, border: '3px solid #0A0A0A', borderTopColor: '#E8233B', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </main>
     )
   }

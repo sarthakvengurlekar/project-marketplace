@@ -95,8 +95,9 @@ async function fetchFromPPT(
   offset: number = 0,
 ): Promise<{ cards: PptCard[]; rateLimited: boolean }> {
   const RETRY_DELAYS = [0, 2000, 8000, 30000]
-  const paginationParams = offset > 0 ? { offset: String(offset) } : {}
-  const qs = new URLSearchParams({ ...params, lightweight: 'true', limit: String(limit), ...paginationParams }).toString()
+  const allParams: Record<string, string> = { ...params, lightweight: 'true', limit: String(limit) }
+  if (offset > 0) allParams.offset = String(offset)
+  const qs = new URLSearchParams(allParams).toString()
 
   for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
     if (RETRY_DELAYS[attempt] > 0) await sleep(RETRY_DELAYS[attempt])

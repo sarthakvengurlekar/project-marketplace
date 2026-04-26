@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useCountry } from '@/lib/context/CountryContext'
 import { formatPrice, convertFromUSD } from '@/lib/currency'
@@ -28,7 +29,7 @@ interface CardData {
 }
 
 interface CollectionItem {
-  id: string        // user_cards.id
+  id: string
   card_id: string
   created_at: string
   condition: string | null
@@ -41,30 +42,15 @@ interface CollectionItem {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const CONDITION_STYLES: Record<string, string> = {
-  NM: 'bg-teal-500/20 text-teal-400 border-teal-500/40 badge-nm',
-  LP: 'bg-blue-500/20 text-blue-400 border-blue-500/40 badge-lp',
-  MP: 'bg-orange-500/20 text-orange-400 border-orange-500/40 badge-mp',
-  HP: 'bg-red-500/20 text-red-400 border-red-500/40 badge-hp',
-}
-
-const CONDITION_ICONS: Record<string, string> = {
-  NM: '★', LP: '✓', MP: '△', HP: '✕',
-}
-
-const GRADE_BADGE_STYLES: Record<string, string> = {
-  PSA: 'bg-red-600 text-white glow-psa',
-  BGS: 'bg-yellow-600 text-white glow-bgs',
-  CGC: 'bg-blue-600 text-white glow-cgc',
-  TAG: 'bg-purple-600 text-white glow-tag',
+const CONDITION_LABEL: Record<string, string> = {
+  NM: 'NM', LP: 'LP', MP: 'MP', HP: 'HP',
 }
 
 function timeAgo(iso: string): string {
   const h = Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000)
   if (h < 1) return 'just now'
   if (h < 24) return `${h}h ago`
-  const d = Math.floor(h / 24)
-  return `${d}d ago`
+  return `${Math.floor(h / 24)}d ago`
 }
 
 function isStale(fetchedAt: string | null): boolean {
@@ -76,15 +62,12 @@ function isStale(fetchedAt: string | null): boolean {
 
 function SkeletonTile() {
   return (
-    <div
-      className="rounded-2xl overflow-hidden animate-pulse"
-      style={{ background: 'linear-gradient(160deg, #1e1030, #160e20)', border: '1px solid rgba(139,92,246,0.2)' }}
-    >
-      <div className="w-full aspect-[2.5/3.5]" style={{ background: '#2a1f3a' }} />
+    <div className="rounded-xl overflow-hidden animate-pulse" style={{ background: '#f0ece2', border: '2px solid #0A0A0A' }}>
+      <div className="w-full aspect-[2.5/3.5]" style={{ background: '#e0dbd0' }} />
       <div className="p-2.5 space-y-2">
-        <div className="h-3 rounded w-3/4" style={{ background: '#2a1f3a' }} />
-        <div className="h-2.5 rounded w-1/2" style={{ background: '#2a1f3a' }} />
-        <div className="h-4 rounded w-2/3 mt-1" style={{ background: '#2a1f3a' }} />
+        <div className="h-3 rounded w-3/4" style={{ background: '#e0dbd0' }} />
+        <div className="h-2.5 rounded w-1/2" style={{ background: '#e0dbd0' }} />
+        <div className="h-4 rounded w-2/3 mt-1" style={{ background: '#e0dbd0' }} />
       </div>
     </div>
   )
@@ -106,11 +89,10 @@ function CardTile({
   onDelete: (userCardId: string) => void
 }) {
   const condition = item.condition ?? 'NM'
-  const condStyle = CONDITION_STYLES[condition] ?? CONDITION_STYLES['NM']
   const priceData = item.cards.card_prices?.[0]
-  const usdPrice = priceData?.usd_price ?? null
+  const usdPrice  = priceData?.usd_price ?? null
   const localPrice = countryCode === 'UAE' ? (priceData?.aed_price ?? null) : (priceData?.inr_price ?? null)
-  const fetchedAt = priceData?.last_fetched ?? null
+  const fetchedAt  = priceData?.last_fetched ?? null
 
   const graded = item.grading_company && item.grading_company !== 'RAW' && item.grade != null
   const gradeDisplay = item.grade != null
@@ -120,28 +102,24 @@ function CardTile({
   return (
     <Link
       href={`/binder/card/${item.cards.id}`}
-      className="holo-card rounded-2xl overflow-hidden group relative block"
-      style={{ background: 'linear-gradient(160deg, #1e1030, #160e20)', border: '1px solid rgba(139,92,246,0.25)' }}
+      className="holo-card rounded-xl overflow-hidden group relative block"
+      style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
     >
-      {/* Top-left badges: grade (if graded) and/or foil */}
-      <div className="absolute top-1.5 left-1.5 z-10 flex flex-col gap-1">
-        {graded && (
-          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded shadow-md ${GRADE_BADGE_STYLES[item.grading_company!] ?? 'bg-zinc-600 text-white'}`}>
+      {/* Top-left badge — grading only */}
+      {graded && (
+        <div className="absolute top-1.5 left-1.5 z-10">
+          <span className="text-[9px] font-black px-1.5 py-0.5 rounded" style={{ background: '#0A0A0A', color: '#FAF6EC' }}>
             {item.grading_company} {gradeDisplay}
           </span>
-        )}
-        {item.is_foil && (
-          <span className="foil-badge text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide">
-            ✦ Foil
-          </span>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Delete button — owner only, appears on hover */}
+      {/* Delete button */}
       {isOwner && (
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item.id) }}
-          className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-zinc-900/90 border border-zinc-700 hover:bg-red-500 hover:border-red-500 text-zinc-400 hover:text-white flex items-center justify-center text-[9px] transition-all opacity-0 group-hover:opacity-100"
+          className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded flex items-center justify-center text-[9px] transition-all opacity-0 group-hover:opacity-100"
+          style={{ background: '#E8233B', border: '1.5px solid #0A0A0A', color: '#fff' }}
           title="Remove from collection"
         >
           ✕
@@ -149,7 +127,7 @@ function CardTile({
       )}
 
       {/* Card image */}
-      <div className="relative w-full aspect-[2.5/3.5] overflow-hidden" style={{ background: '#1a1028' }}>
+      <div className="relative w-full aspect-[2.5/3.5] overflow-hidden" style={{ background: '#f0ece2', borderBottom: '2px solid #0A0A0A' }}>
         <Image
           src={item.cards.image_url}
           alt={item.cards.name}
@@ -162,31 +140,38 @@ function CardTile({
 
       {/* Info */}
       <div className="p-2.5 space-y-1">
-        <p className="text-white font-bold text-xs leading-tight line-clamp-1">{item.cards.name}</p>
-        <p className="text-zinc-500 text-[11px] line-clamp-1">{item.cards.set_name}</p>
+        <p className="font-black text-xs leading-tight line-clamp-1" style={{ color: '#0A0A0A' }}>{item.cards.name}</p>
+        <p className="text-[11px] line-clamp-1" style={{ color: '#8B7866' }}>{item.cards.set_name}</p>
 
-        {/* Condition badge */}
-        <span className={`inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wide ${condStyle}`}>
-          <span>{CONDITION_ICONS[condition] ?? ''}</span>{condition}
-        </span>
+        {/* Condition + foil row */}
+        <div className="flex items-center gap-1 flex-wrap">
+          <span
+            className="text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide"
+            style={{ background: '#0A0A0A', color: '#FAF6EC' }}
+          >
+            {CONDITION_LABEL[condition] ?? condition}
+          </span>
+          {item.is_foil && (
+            <span className="foil-badge text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide">
+              ✦ FOIL
+            </span>
+          )}
+        </div>
 
         {/* Price */}
         {priceLoading ? (
-          <div className="h-3.5 w-3/4 bg-zinc-800 rounded animate-pulse mt-1" />
+          <div className="h-3.5 w-3/4 rounded animate-pulse mt-1" style={{ background: '#e0dbd0' }} />
         ) : usdPrice != null ? (
           <>
-            <p className="font-black text-xs text-gradient-pika">
-              {formatPrice(
-                localPrice ?? convertFromUSD(usdPrice!, countryCode),
-                countryCode
-              )}
+            <p className="font-black text-xs" style={{ color: '#E8233B' }}>
+              {formatPrice(localPrice ?? convertFromUSD(usdPrice, countryCode), countryCode)}
             </p>
             {fetchedAt && (
-              <p className="text-zinc-600 text-[10px]">Updated {timeAgo(fetchedAt)}</p>
+              <p className="text-[10px]" style={{ color: '#8B7866' }}>Updated {timeAgo(fetchedAt)}</p>
             )}
           </>
         ) : (
-          <p className="text-zinc-600 text-[10px]">Price unavailable</p>
+          <p className="text-[10px]" style={{ color: '#8B7866' }}>Price unavailable</p>
         )}
       </div>
     </Link>
@@ -204,6 +189,7 @@ export default function BinderView({
   profileUsername: string
   isOwner: boolean
 }) {
+  const router = useRouter()
   const { countryCode, initialized: countryReady } = useCountry()
   const [items, setItems] = useState<CollectionItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -212,19 +198,11 @@ export default function BinderView({
   const refreshed = useRef<Set<string>>(new Set())
 
   const fetchCollection = useCallback(async () => {
-    console.log('[binder] fetchCollection — querying for user_id:', profileUserId)
-
     const { data, error } = await supabase
       .from('user_cards')
       .select(`
-        id,
-        card_id,
-        created_at,
-        condition,
-        is_foil,
-        grading_company,
-        grade,
-        grade_label,
+        id, card_id, created_at, condition, is_foil,
+        grading_company, grade, grade_label,
         cards (
           id, name, set_name, rarity, image_url, card_number,
           card_prices ( usd_price, inr_price, aed_price, last_fetched )
@@ -234,42 +212,22 @@ export default function BinderView({
       .eq('list_type', 'HAVE')
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('[binder] query error — code:', error.code,
-        '| message:', error.message,
-        '| details:', error.details,
-        '| hint:', error.hint)
-      setLoading(false)
-      return
-    }
-
-    console.log('[binder] query returned', data?.length ?? 0, 'cards for user_id:', profileUserId)
-
-    if (!data) { setLoading(false); return }
+    if (error) { setLoading(false); return }
+    if (!data)  { setLoading(false); return }
 
     const typed = data as unknown as CollectionItem[]
     setItems(typed)
     setLoading(false)
 
-    // Kick off price refresh for stale / missing cards.
-    // Use last_fetched as the sole gate so null-price cards with a recent
-    // last_fetched (bumped by refresh-price's 24h suppression) are not
-    // re-queried on every mount.
-    //
-    // Only process cards NOT already in-flight (not in refreshed.current).
-    // Using an additive merge (not replace) prevents a race where a second
-    // fetchCollection call re-adds already-handled IDs that would then be
-    // skipped by the refreshed.current guard — permanently blocking the total.
     const toRefresh = typed
       .filter(item => isStale(item.cards.card_prices?.[0]?.last_fetched ?? null))
       .filter(item => !refreshed.current.has(item.cards.id))
 
     if (toRefresh.length === 0) return
 
-    const newIds = new Set(toRefresh.map(i => i.cards.id))
-    setPriceLoadingIds(prev => new Set([...prev, ...newIds]))
+    const newIds = toRefresh.map(i => i.cards.id)
+    setPriceLoadingIds(prev => new Set(Array.from(prev).concat(newIds)))
 
-    // Process in small batches to avoid hammering the upstream PPT API
     const BATCH = 3
     for (let i = 0; i < toRefresh.length; i += BATCH) {
       const batch = toRefresh.slice(i, i + BATCH)
@@ -290,19 +248,14 @@ export default function BinderView({
 
             setItems(prev =>
               prev.map(it =>
-                it.cards.id !== cid
-                  ? it
-                  : {
-                      ...it,
-                      cards: {
-                        ...it.cards,
-                        card_prices: [{ usd_price, inr_price, aed_price, last_fetched }],
-                      },
-                    }
+                it.cards.id !== cid ? it : {
+                  ...it,
+                  cards: { ...it.cards, card_prices: [{ usd_price, inr_price, aed_price, last_fetched }] },
+                }
               )
             )
           } catch {
-            // AbortError (timeout) or network error — fall through to finally
+            // AbortError or network error — finally handles cleanup
           } finally {
             clearTimeout(timeoutId)
             setPriceLoadingIds(prev => {
@@ -313,15 +266,11 @@ export default function BinderView({
           }
         })
       )
-      // 1-second gap between batches keeps us well under the 60 req/min PPT limit
       if (i + BATCH < toRefresh.length) await new Promise(r => setTimeout(r, 1000))
     }
   }, [profileUserId])
 
-  useEffect(() => {
-    fetchCollection()
-  }, [fetchCollection])
-
+  useEffect(() => { fetchCollection() }, [fetchCollection])
 
   async function handleDelete(userCardId: string) {
     const { error } = await supabase
@@ -329,7 +278,6 @@ export default function BinderView({
       .delete()
       .eq('id', userCardId)
       .eq('user_id', profileUserId)
-
     if (!error) setItems(prev => prev.filter(i => i.id !== userCardId))
   }
 
@@ -337,65 +285,94 @@ export default function BinderView({
     const p = item.cards.card_prices?.[0]
     const local = countryCode === 'UAE' ? (p?.aed_price ?? null) : (p?.inr_price ?? null)
     if (local != null) return sum + local
-    // fall back to client-side conversion when pre-computed price is missing
     return sum + convertFromUSD(p?.usd_price ?? 0, countryCode)
   }, 0)
+
   const pricesUpdating = priceLoadingIds.size > 0
 
   return (
-    <main
-      className="min-h-screen px-4 py-8 pb-48"
-      style={{ background: 'radial-gradient(ellipse at 60% -20%, #3d1f80 0%, #1a0830 35%, #0a0514 100%)' }}
-    >
+    <main className="min-h-screen px-4 py-6 pb-28" style={{ background: '#FAF6EC' }}>
       <div className="max-w-lg mx-auto">
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
-            <Link href="/feed">
-              <div className="w-9 h-9 rounded-full bg-yellow-400 flex items-center justify-center shadow-md shadow-yellow-400/20">
-                <span className="text-sm font-black text-black">PT</span>
+            {/* Back button (non-owner) or PT logo (owner) */}
+            {isOwner ? (
+              <div
+                className="w-10 h-10 flex items-center justify-center font-black text-sm"
+                style={{ background: '#E8233B', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', color: '#FAF6EC' }}
+              >
+                PT
               </div>
-            </Link>
+            ) : (
+              <button
+                onClick={() => router.back()}
+                className="w-10 h-10 flex items-center justify-center font-black text-base"
+                style={{ background: '#F4D03F', border: '2px solid #0A0A0A', boxShadow: '2px 2px 0 #0A0A0A' }}
+                aria-label="Back"
+              >
+                ←
+              </button>
+            )}
             <div>
-              <h1 className="text-lg font-black text-white tracking-tight leading-none">
-                {isOwner ? 'My Binder' : `@${profileUsername}'s Binder`}
+              <h1 className="font-black text-lg leading-none tracking-tight" style={{ color: '#0A0A0A' }}>
+                {isOwner ? 'My collection' : `@${profileUsername}`}
               </h1>
-              <p className="text-zinc-500 text-xs mt-0.5">
+              <p className="text-xs mt-0.5" style={{ color: '#8B7866' }}>
                 {loading ? '—' : `${items.length} card${items.length !== 1 ? 's' : ''}`}
               </p>
             </div>
           </div>
-          <Link
-            href="/feed"
-            className="text-xs font-bold text-zinc-500 hover:text-yellow-400 transition-colors uppercase tracking-widest"
-          >
-            ← Feed
-          </Link>
+          {!isOwner && (
+            <button
+              onClick={() => router.back()}
+              className="font-black text-xs px-4 py-2"
+              style={{ background: '#FAF6EC', color: '#0A0A0A', border: '2px solid #0A0A0A' }}
+            >
+              ← BACK
+            </button>
+          )}
         </div>
 
-        {/* Total value banner */}
+        {/* Stats / value banner */}
         {!loading && items.length > 0 && (
           <div
-            className="rounded-2xl px-5 py-4 mb-6"
-            style={{ background: 'linear-gradient(135deg, #1e1035, #160e20)', border: '1px solid rgba(255,222,0,0.2)', boxShadow: '0 0 30px rgba(124,83,140,0.15)' }}
+            className="rounded-xl mb-5 overflow-hidden"
+            style={{ border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
           >
-            <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
-              Total collection value
-            </p>
-            {!countryReady ? (
-              <div className="h-8 w-36 bg-zinc-800 rounded-lg animate-pulse" />
-            ) : (
-              <p className="text-3xl font-black tracking-tight text-gradient-pika">
-                {formatPrice(totalLocal, countryCode)}
-              </p>
-            )}
-            {pricesUpdating && countryReady && (
-              <p className="text-zinc-500 text-[10px] mt-1">Updating prices…</p>
-            )}
-            <p className="text-zinc-600 text-[10px] mt-2 leading-relaxed">
-              Prices based on US market rates. Actual trade value may vary.
-            </p>
+            <div className="grid grid-cols-3" style={{ borderBottom: '2px solid #0A0A0A' }}>
+              {[
+                { label: 'CARDS', value: items.length.toString() },
+                { label: 'VALUE', value: countryReady ? formatPrice(totalLocal, countryCode) : '…' },
+                { label: '7D',    value: '+2.4%' },
+              ].map((s, i, arr) => (
+                <div
+                  key={s.label}
+                  className="py-3 px-3 flex flex-col"
+                  style={{ borderRight: i < arr.length - 1 ? '2px solid #0A0A0A' : 'none', background: '#FAF6EC' }}
+                >
+                  <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#8B7866' }}>{s.label}</span>
+                  <span
+                    className="font-black text-base leading-tight mt-0.5"
+                    style={{ color: s.label === 'VALUE' ? '#E8233B' : s.label === '7D' ? '#16a34a' : '#0A0A0A' }}
+                  >
+                    {s.label === 'VALUE' && pricesUpdating ? (
+                      <span className="text-xs" style={{ color: '#8B7866' }}>Updating…</span>
+                    ) : s.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Holdings label */}
+        {!loading && items.length > 0 && (
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-2 h-2 rounded-sm" style={{ background: '#E8233B' }} />
+            <span className="font-black text-xs uppercase tracking-widest" style={{ color: '#0A0A0A' }}>Holdings</span>
+            <div className="flex-1 h-px" style={{ background: '#0A0A0A' }} />
           </div>
         )}
 
@@ -406,14 +383,14 @@ export default function BinderView({
           </div>
         ) : items.length === 0 ? (
           <div
-            className="rounded-2xl p-10 text-center"
-            style={{ background: 'linear-gradient(135deg, #1e1035, #160e20)', border: '1px solid rgba(255,222,0,0.15)', boxShadow: '0 0 30px rgba(124,83,140,0.12)' }}
+            className="rounded-xl p-10 text-center"
+            style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
           >
             <span className="text-5xl mb-4 block">📦</span>
-            <h2 className="text-white font-black text-lg mb-2">
+            <h2 className="font-black text-lg mb-2" style={{ color: '#0A0A0A' }}>
               {isOwner ? 'Your binder is empty' : 'No cards yet'}
             </h2>
-            <p className="text-zinc-500 text-sm mb-6">
+            <p className="text-sm mb-6" style={{ color: '#8B7866' }}>
               {isOwner
                 ? 'Search for cards and add them to your collection.'
                 : `@${profileUsername} hasn't added any cards yet.`}
@@ -421,7 +398,8 @@ export default function BinderView({
             {isOwner && (
               <Link
                 href="/binder/add-cards"
-                className="inline-flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black font-black rounded-xl px-5 py-2.5 text-sm transition-colors shadow-lg shadow-yellow-400/20"
+                className="inline-flex items-center gap-2 font-black rounded px-5 py-2.5 text-sm transition-all"
+                style={{ background: '#E8233B', color: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
               >
                 + Add Cards
               </Link>
@@ -445,19 +423,20 @@ export default function BinderView({
 
       {/* Owner FABs */}
       {isOwner && !loading && (
-        <div className="fixed bottom-24 left-0 right-0 flex justify-center gap-3 z-30 px-4">
+        <div className="fixed bottom-20 left-0 right-0 flex justify-center gap-3 z-30 px-4">
           <Link
             href="/binder/add-cards"
-            className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-black font-black rounded-2xl px-6 py-3.5 text-sm tracking-wide transition-colors shadow-xl shadow-yellow-400/30"
+            className="flex items-center gap-2 font-black rounded px-6 py-3.5 text-sm tracking-wide transition-all"
+            style={{ background: '#E8233B', color: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '5px 5px 0 #0A0A0A' }}
           >
-            + Add Cards
+            + ADD CARD
           </Link>
           <button
-            className="flex items-center gap-2 text-white font-black rounded-2xl px-6 py-3.5 text-sm tracking-wide transition-colors shadow-xl"
-            style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.35)' }}
+            className="flex items-center gap-2 font-black rounded px-6 py-3.5 text-sm tracking-wide"
+            style={{ background: '#FAF6EC', color: '#0A0A0A', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
             onClick={() => setScanOpen(true)}
           >
-            📷 Scan Card
+            SCAN
           </button>
         </div>
       )}

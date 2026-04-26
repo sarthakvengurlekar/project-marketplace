@@ -24,8 +24,9 @@ export default function FeedPage() {
 
   if (sellers === null) {
     return (
-      <main className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-zinc-500 text-sm animate-pulse">Loading feed…</div>
+      <main className="min-h-screen flex items-center justify-center" style={{ background: '#FAF6EC' }}>
+        <div style={{ width: 32, height: 32, border: '3px solid #0A0A0A', borderTopColor: '#E8233B', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </main>
     )
   }

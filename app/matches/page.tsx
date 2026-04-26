@@ -8,6 +8,7 @@ import Link from 'next/link'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type MatchStatus = 'PENDING' | 'ACTIVE' | 'DECLINED' | 'COMPLETED'
+type TabFilter = 'ACTIVE' | 'PENDING' | 'DONE'
 
 interface OtherUser {
   id: string
@@ -42,8 +43,6 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
-// Sort: ACTIVE+unread → ACTIVE → PENDING → DECLINED/COMPLETED
-// Within each group: most recent activity first
 function sortMatches(list: MatchRow[]): MatchRow[] {
   function tier(m: MatchRow): number {
     if (m.status === 'ACTIVE' && m.lastMessage?.isUnread) return 0
@@ -63,13 +62,33 @@ function sortMatches(list: MatchRow[]): MatchRow[] {
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
 function Avatar({ user }: { user: OtherUser }) {
+  const initials = user.username[0]?.toUpperCase() ?? '?'
   return (
-    <div className="relative w-11 h-11 flex-shrink-0">
+    <div
+      style={{
+        position:   'relative',
+        width:       44,
+        height:      44,
+        flexShrink: 0,
+        border:     '2px solid #0A0A0A',
+        boxShadow:  '2px 2px 0 #0A0A0A',
+        overflow:   'hidden',
+      }}
+    >
       {user.avatar_url ? (
-        <Image src={user.avatar_url} alt={user.username} fill className="rounded-full object-cover" unoptimized />
+        <Image src={user.avatar_url} alt={user.username} fill className="object-cover" unoptimized />
       ) : (
-        <div className="w-11 h-11 rounded-full bg-yellow-400/20 border border-yellow-400/30 flex items-center justify-center">
-          <span className="text-yellow-400 font-black text-sm uppercase">{user.username[0]}</span>
+        <div
+          style={{
+            width:           '100%',
+            height:          '100%',
+            background:      '#F4D03F',
+            display:         'flex',
+            alignItems:      'center',
+            justifyContent:  'center',
+          }}
+        >
+          <span style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16 }}>{initials}</span>
         </div>
       )}
     </div>
@@ -78,18 +97,26 @@ function Avatar({ user }: { user: OtherUser }) {
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
-const STATUS_META: Record<MatchStatus, { label: string; icon: string; cls: string; glow?: string }> = {
-  PENDING:   { label: 'PENDING',   icon: '⚡', cls: 'bg-yellow-400/15 text-yellow-400 border border-yellow-400/30', glow: 'badge-pending'  },
-  ACTIVE:    { label: 'ACTIVE',    icon: '✨', cls: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25', glow: 'badge-active' },
-  DECLINED:  { label: 'DECLINED',  icon: '💔', cls: 'bg-zinc-700/30 text-zinc-500 border border-zinc-700/30' },
-  COMPLETED: { label: 'COMPLETED', icon: '✓',  cls: 'bg-zinc-700/30 text-zinc-500 border border-zinc-700/30' },
-}
-
 function StatusBadge({ status }: { status: MatchStatus }) {
-  const m = STATUS_META[status]
+  const styles: Record<MatchStatus, { bg: string; color: string; border: string; label: string }> = {
+    ACTIVE:    { bg: '#F4D03F', color: '#0A0A0A', border: '1.5px solid #0A0A0A', label: 'ACTIVE'    },
+    PENDING:   { bg: '#FAF6EC', color: '#0A0A0A', border: '1.5px solid #0A0A0A', label: 'PENDING'   },
+    DECLINED:  { bg: '#FAF6EC', color: '#8B7866', border: '1.5px solid #8B7866', label: 'DECLINED'  },
+    COMPLETED: { bg: '#FAF6EC', color: '#8B7866', border: '1.5px solid #8B7866', label: 'COMPLETED' },
+  }
+  const s = styles[status]
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full ${m.cls} ${m.glow ?? ''}`}>
-      <span>{m.icon}</span>{m.label}
+    <span style={{
+      background:    s.bg,
+      color:         s.color,
+      border:        s.border,
+      fontSize:      9,
+      fontWeight:    900,
+      padding:       '2px 6px',
+      letterSpacing: '0.05em',
+      display:       'inline-block',
+    }}>
+      {s.label}
     </span>
   )
 }
@@ -110,82 +137,108 @@ function MatchItem({
   const other = match.otherUser
   const isPendingSeller = match.role === 'SELLER' && match.status === 'PENDING'
   const timestamp = match.lastMessage?.created_at ?? match.created_at
+  const isUnread = match.lastMessage?.isUnread
 
   return (
-    <div className="relative" style={{ borderBottom: '1px solid rgba(139,92,246,0.12)' }}>
-      <Link
-        href={`/matches/${match.id}`}
-        className="flex items-start gap-3 px-4 py-3.5 transition-colors"
-        style={{ ':hover': { background: 'rgba(42,31,58,0.5)' } } as React.CSSProperties}
-        onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(42,31,58,0.5)'}
-        onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.background = 'transparent'}
-      >
-        {/* Avatar */}
-        {other ? (
-          <Avatar user={other} />
-        ) : (
-          <div className="w-11 h-11 rounded-full bg-zinc-800 flex-shrink-0" />
-        )}
+    <Link
+      href={`/matches/${match.id}`}
+      style={{
+        display:     'block',
+        background:  '#FAF6EC',
+        border:      '2px solid #0A0A0A',
+        boxShadow:   isUnread ? '4px 4px 0 #E8233B' : '3px 3px 0 #0A0A0A',
+        marginBottom: 12,
+        textDecoration: 'none',
+      }}
+    >
+      <div style={{ padding: '14px 14px 12px' }}>
+        {/* Top row: avatar + name/status + timestamp */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          {other ? (
+            <Avatar user={other} />
+          ) : (
+            <div style={{ width: 44, height: 44, background: '#e8e2d4', border: '2px solid #0A0A0A', flexShrink: 0 }} />
+          )}
 
-        {/* Body */}
-        <div className="flex-1 min-w-0">
-          {/* Name row */}
-          <div className="flex items-center gap-1.5 flex-wrap pr-1">
-            <span className="text-white font-bold text-sm leading-tight">
-              {other ? `@${other.username}` : '—'}
-            </span>
-            <StatusBadge status={match.status} />
-            {match.lastMessage?.isUnread && (
-              <span
-                className="text-[11px] flex-shrink-0"
-                style={{ animation: 'navBadgePulse 1.5s ease-in-out infinite', display: 'inline-block' }}
-              >⚡</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 14, lineHeight: 1.2 }}>
+                @{other?.username ?? '—'}
+              </span>
+              <StatusBadge status={match.status} />
+            </div>
+
+            {other && (other.city || other.country_code) && (
+              <p style={{ color: '#8B7866', fontSize: 11, margin: '3px 0 0' }}>
+                {FLAGS[other.country_code] ?? ''}{other.city ? ` ${other.city}` : ''}{other.trade_rating != null ? ` · New trader` : ''}
+              </p>
             )}
           </div>
 
-          {/* Location */}
-          {other && (other.city || other.country_code) && (
-            <p className="text-zinc-500 text-xs mt-0.5 leading-tight">
-              {FLAGS[other.country_code] ?? ''}{other.city ? ` ${other.city}` : ''}
-            </p>
-          )}
-
-          {/* Last message */}
-          {match.lastMessage ? (
-            <p className={`text-xs mt-1 line-clamp-1 leading-snug ${
-              match.lastMessage.isUnread ? 'text-white font-semibold' : 'text-zinc-500'
-            }`}>
-              {match.lastMessage.content}
-            </p>
-          ) : (
-            <p className="text-zinc-600 text-xs mt-1 italic leading-snug">No messages yet</p>
-          )}
-
-          {/* Accept / Decline — seller only on PENDING */}
-          {isPendingSeller && (
-            <div className="flex gap-2 mt-2.5" onClick={e => e.preventDefault()}>
-              <button
-                onClick={e => { e.preventDefault(); onAccept(match.id) }}
-                disabled={acting}
-                className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-black rounded-xl transition-colors disabled:opacity-40"
-              >
-                Accept
-              </button>
-              <button
-                onClick={e => { e.preventDefault(); onDecline(match.id) }}
-                disabled={acting}
-                className="px-4 py-1.5 bg-red-500/15 hover:bg-red-500/25 text-red-400 text-xs font-black rounded-xl transition-colors disabled:opacity-40"
-              >
-                Decline
-              </button>
-            </div>
-          )}
+          <span style={{ color: '#8B7866', fontSize: 10, fontWeight: 600, flexShrink: 0, marginTop: 2 }}>
+            {timeAgo(timestamp)}
+          </span>
         </div>
 
-        {/* Timestamp */}
-        <span className="text-[10px] text-zinc-600 flex-shrink-0 mt-0.5">{timeAgo(timestamp)}</span>
-      </Link>
-    </div>
+        {/* Last message */}
+        {match.lastMessage ? (
+          <p style={{
+            color:      isUnread ? '#0A0A0A' : '#8B7866',
+            fontWeight: isUnread ? 700 : 500,
+            fontSize:   12,
+            margin:     '10px 0 0',
+            overflow:   'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            &ldquo;{match.lastMessage.content.startsWith('[OFFER]:') ? '⚡ Price offer' : match.lastMessage.content}&rdquo;
+          </p>
+        ) : (
+          <p style={{ color: '#8B7866', fontSize: 12, margin: '10px 0 0', fontStyle: 'italic' }}>
+            No messages yet
+          </p>
+        )}
+
+        {/* Accept / Decline — seller only on PENDING */}
+        {isPendingSeller && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }} onClick={e => e.preventDefault()}>
+            <button
+              onClick={e => { e.preventDefault(); onAccept(match.id) }}
+              disabled={acting}
+              style={{
+                background:  '#E8233B',
+                border:      '2px solid #0A0A0A',
+                boxShadow:   acting ? 'none' : '2px 2px 0 #0A0A0A',
+                color:       '#FAF6EC',
+                fontWeight:  900,
+                fontSize:    12,
+                padding:     '6px 14px',
+                cursor:      acting ? 'not-allowed' : 'pointer',
+                opacity:     acting ? 0.5 : 1,
+              }}
+            >
+              Accept
+            </button>
+            <button
+              onClick={e => { e.preventDefault(); onDecline(match.id) }}
+              disabled={acting}
+              style={{
+                background:  '#FAF6EC',
+                border:      '2px solid #0A0A0A',
+                color:       '#0A0A0A',
+                fontWeight:  900,
+                fontSize:    12,
+                padding:     '6px 14px',
+                cursor:      acting ? 'not-allowed' : 'pointer',
+                opacity:     acting ? 0.5 : 1,
+              }}
+            >
+              Decline
+            </button>
+          </div>
+        )}
+      </div>
+    </Link>
   )
 }
 
@@ -193,15 +246,15 @@ function MatchItem({
 
 export default function MatchesPage() {
   const router = useRouter()
-  const [matches,  setMatches]  = useState<MatchRow[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [actingId, setActingId] = useState<string | null>(null)
+  const [matches,   setMatches]   = useState<MatchRow[]>([])
+  const [loading,   setLoading]   = useState(true)
+  const [actingId,  setActingId]  = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<TabFilter>('ACTIVE')
 
   const load = useCallback(async () => {
     const res = await fetch('/api/matches-list', { cache: 'no-store' })
     if (res.status === 401) { router.push('/login'); return }
     const data = await res.json()
-    // Support both old shape (buying/selling) and new shape (matches)
     const all: MatchRow[] = data.matches ?? [
       ...(data.buying  ?? []),
       ...(data.selling ?? []),
@@ -237,74 +290,162 @@ export default function MatchesPage() {
 
   const sorted = sortMatches(matches)
 
+  const tabMatches: Record<TabFilter, MatchRow[]> = {
+    ACTIVE:  sorted.filter(m => m.status === 'ACTIVE'),
+    PENDING: sorted.filter(m => m.status === 'PENDING'),
+    DONE:    sorted.filter(m => m.status === 'DECLINED' || m.status === 'COMPLETED'),
+  }
+
+  const activeBadgeCount = tabMatches.ACTIVE.filter(m => m.lastMessage?.isUnread).length
+  const pendingCount     = tabMatches.PENDING.length
+
+  const visibleMatches = tabMatches[activeTab]
+
+  const activeCount = sorted.filter(m => m.status === 'ACTIVE').length
+  const unreadCount = sorted.filter(m => m.lastMessage?.isUnread).length
+
   return (
-    <main className="min-h-screen pb-28" style={{ background: 'radial-gradient(ellipse at 50% -10%, #2d1060 0%, #1a0830 40%, #0a0514 100%)' }}>
+    <main className="min-h-screen pb-28" style={{ background: '#FAF6EC' }}>
 
       {/* Sticky header */}
       <div
-        className="sticky top-0 z-20 backdrop-blur-sm px-4 py-3.5"
-        style={{ background: 'rgba(10,5,20,0.96)', borderBottom: '1px solid rgba(139,92,246,0.18)' }}
+        className="sticky top-0 z-20 px-4 py-3"
+        style={{ background: '#FAF6EC', borderBottom: '2px solid #0A0A0A' }}
       >
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <h1 className="text-white font-black text-base tracking-tight">Trades</h1>
-          <div className="flex items-center gap-4">
-            <Link href="/feed" className="text-xs font-bold text-zinc-500 hover:text-yellow-400 transition-colors uppercase tracking-widest">
-              Feed
-            </Link>
-            <Link href="/binder" className="text-xs font-bold text-zinc-500 hover:text-yellow-400 transition-colors uppercase tracking-widest">
-              Binder
-            </Link>
+        <div className="max-w-lg mx-auto space-y-3">
+
+          {/* Title row */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="font-black text-xl leading-none" style={{ color: '#0A0A0A' }}>Trades</h1>
+              {!loading && (
+                <p className="text-xs mt-0.5" style={{ color: '#8B7866' }}>
+                  {activeCount} active{unreadCount > 0 ? ` · ${unreadCount} unread` : ''}
+                </p>
+              )}
+            </div>
+            <div
+              style={{
+                width:          36,
+                height:         36,
+                background:     '#F4D03F',
+                border:         '2px solid #0A0A0A',
+                boxShadow:      '3px 3px 0 #0A0A0A',
+                display:        'flex',
+                alignItems:     'center',
+                justifyContent: 'center',
+                fontSize:       16,
+              }}
+            >
+              🔍
+            </div>
           </div>
+
+          {/* Tabs: Active / Pending / Done */}
+          <div
+            className="grid grid-cols-3 overflow-hidden"
+            style={{ border: '2px solid #0A0A0A' }}
+          >
+            {(['ACTIVE', 'PENDING', 'DONE'] as TabFilter[]).map((tab, i, arr) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className="py-2 text-xs font-black uppercase tracking-wide transition-all flex items-center justify-center gap-1.5"
+                style={{
+                  background:  activeTab === tab ? '#F4D03F' : '#FAF6EC',
+                  color:       '#0A0A0A',
+                  borderRight: i < arr.length - 1 ? '2px solid #0A0A0A' : 'none',
+                }}
+              >
+                {tab}
+                {tab === 'ACTIVE' && activeBadgeCount > 0 && (
+                  <span style={{
+                    background: '#E8233B', color: '#FAF6EC',
+                    fontSize: 9, fontWeight: 900,
+                    padding: '1px 5px',
+                    minWidth: 16, textAlign: 'center',
+                  }}>
+                    {activeBadgeCount}
+                  </span>
+                )}
+                {tab === 'PENDING' && pendingCount > 0 && (
+                  <span style={{
+                    background: '#0A0A0A', color: '#FAF6EC',
+                    fontSize: 9, fontWeight: 900,
+                    padding: '1px 5px',
+                    minWidth: 16, textAlign: 'center',
+                  }}>
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
         </div>
       </div>
 
       {/* Content */}
-      <div className="max-w-lg mx-auto">
+      <div className="max-w-lg mx-auto px-4 pt-4">
         {loading ? (
           // Skeleton
-          <div className="pt-2">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="flex items-start gap-3 px-4 py-3.5 animate-pulse" style={{ borderBottom: '1px solid rgba(139,92,246,0.12)' }}>
-                <div className="w-11 h-11 rounded-full flex-shrink-0" style={{ background: '#2a1f3a' }} />
-                <div className="flex-1 space-y-2 pt-1">
-                  <div className="flex gap-2">
-                    <div className="w-24 h-3 rounded" style={{ background: '#2a1f3a' }} />
-                    <div className="w-14 h-3 rounded" style={{ background: '#2a1f3a' }} />
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => (
+              <div
+                key={i}
+                className="animate-pulse p-4"
+                style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A' }}
+              >
+                <div className="flex gap-3 items-start">
+                  <div style={{ width: 44, height: 44, background: '#e8e2d4', border: '2px solid #0A0A0A', flexShrink: 0 }} />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div style={{ background: '#e8e2d4', height: 12, width: '60%', borderRadius: 2 }} />
+                    <div style={{ background: '#e8e2d4', height: 10, width: '40%', borderRadius: 2 }} />
+                    <div style={{ background: '#e8e2d4', height: 10, width: '80%', borderRadius: 2 }} />
                   </div>
-                  <div className="w-16 h-2.5 rounded" style={{ background: '#2a1f3a' }} />
-                  <div className="w-48 h-2.5 rounded" style={{ background: '#2a1f3a' }} />
                 </div>
               </div>
             ))}
           </div>
-        ) : sorted.length === 0 ? (
+        ) : visibleMatches.length === 0 ? (
           // Empty state
-          <div className="text-center py-20 px-8">
-            <span className="text-5xl mb-5 block">💬</span>
-            <h2 className="text-white font-black text-lg mb-2">No trades yet</h2>
-            <p className="text-zinc-500 text-sm leading-relaxed mb-6">
-              Browse the feed to find sellers and send your first trade request!
+          <div
+            className="rounded-xl p-10 text-center mt-4"
+            style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
+          >
+            <span className="text-5xl mb-4 block">
+              {activeTab === 'ACTIVE' ? '💬' : activeTab === 'PENDING' ? '⏳' : '✓'}
+            </span>
+            <h2 className="font-black text-lg mb-2" style={{ color: '#0A0A0A' }}>
+              {activeTab === 'ACTIVE' ? 'No active trades' : activeTab === 'PENDING' ? 'No pending trades' : 'No completed trades'}
+            </h2>
+            <p className="text-sm leading-relaxed mb-5" style={{ color: '#8B7866' }}>
+              {activeTab === 'ACTIVE'
+                ? 'Browse the feed to find sellers and start trading!'
+                : activeTab === 'PENDING'
+                ? 'Trade requests you send will appear here.'
+                : 'Completed and declined trades show up here.'}
             </p>
-            <Link
-              href="/feed"
-              className="inline-block bg-yellow-400 hover:bg-yellow-300 text-black font-black rounded-xl px-6 py-3 text-sm transition-colors"
-            >
-              Browse Feed →
-            </Link>
+            {activeTab === 'ACTIVE' && (
+              <Link
+                href="/feed"
+                className="inline-block text-sm font-black px-5 py-2.5"
+                style={{ background: '#E8233B', color: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A' }}
+              >
+                Browse Feed →
+              </Link>
+            )}
           </div>
         ) : (
-          // Match list
-          <div className="pt-1">
-            {sorted.map(match => (
-              <MatchItem
-                key={match.id}
-                match={match}
-                onAccept={handleAccept}
-                onDecline={handleDecline}
-                acting={actingId === match.id}
-              />
-            ))}
-          </div>
+          visibleMatches.map(match => (
+            <MatchItem
+              key={match.id}
+              match={match}
+              onAccept={handleAccept}
+              onDecline={handleDecline}
+              acting={actingId === match.id}
+            />
+          ))
         )}
       </div>
     </main>

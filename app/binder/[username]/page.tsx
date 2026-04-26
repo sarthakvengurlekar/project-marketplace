@@ -40,12 +40,12 @@ export default function UserBinderPage() {
 
   if (notFound) {
     return (
-      <main className="min-h-screen bg-zinc-950 flex items-center justify-center px-4">
+      <main className="min-h-screen flex items-center justify-center px-4" style={{ background: '#FAF6EC' }}>
         <div className="text-center">
           <p className="text-5xl mb-4">🔍</p>
-          <h1 className="text-white font-black text-xl mb-2">@{username} not found</h1>
-          <p className="text-zinc-500 text-sm mb-6">This user doesn&apos;t exist or hasn&apos;t set up their profile yet.</p>
-          <Link href="/feed" className="text-yellow-400 hover:text-yellow-300 font-bold text-sm transition-colors">
+          <h1 className="font-black text-xl mb-2" style={{ color: '#0A0A0A' }}>@{username} not found</h1>
+          <p className="text-sm mb-6" style={{ color: '#8B7866' }}>This user doesn&apos;t exist or hasn&apos;t set up their profile yet.</p>
+          <Link href="/feed" className="font-bold text-sm" style={{ color: '#E8233B' }}>
             ← Back to Feed
           </Link>
         </div>
@@ -55,8 +55,9 @@ export default function UserBinderPage() {
 
   if (!state) {
     return (
-      <main className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+      <main className="min-h-screen flex items-center justify-center" style={{ background: '#FAF6EC' }}>
+        <div style={{ width: 32, height: 32, border: '3px solid #0A0A0A', borderTopColor: '#E8233B', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </main>
     )
   }

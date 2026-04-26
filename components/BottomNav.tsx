@@ -4,46 +4,41 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
 
-// ─── Pokemon-themed SVG icons ─────────────────────────────────────────────────
+// ─── SVG icons ────────────────────────────────────────────────────────────────
 
-function PokeballIcon({ active }: { active: boolean }) {
+function BinderIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <circle cx="12" cy="12" r="9.5"/>
-      <path d="M2.5 12h7M14.5 12H21.5"/>
-      <circle cx="12" cy="12" r="2.5" fill={active ? 'currentColor' : 'none'}/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="2" width="16" height="20" rx="2"/>
+      <line x1="4" y1="8" x2="20" y2="8"/>
+      <line x1="9" y1="2" x2="9" y2="22"/>
     </svg>
   )
 }
 
-function PokedexIcon() {
+function FeedIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <rect x="4.5" y="2" width="15" height="20" rx="2.5"/>
-      <circle cx="12" cy="14" r="3.5"/>
-      <path d="M8 7h3M13 7h3"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8"/>
+      <path d="M21 21l-4.35-4.35"/>
     </svg>
   )
 }
 
-function TradeIcon() {
+function TradesIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7 3L3 7l4 4"/>
-      <path d="M3 7h13a4 4 0 010 8H8"/>
-      <path d="M17 21l4-4-4-4"/>
-      <path d="M21 17H8a4 4 0 010-8h12"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 16V4m0 0L3 8m4-4l4 4"/>
+      <path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
     </svg>
   )
 }
 
-function TrainerIcon() {
+function ProfileIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <rect x="3" y="4" width="18" height="16" rx="3"/>
-      <circle cx="9" cy="10" r="2.5"/>
-      <path d="M5 19c0-2.2 1.8-4 4-4"/>
-      <path d="M14 9h5M14 12h4M14 15h3"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
     </svg>
   )
 }
@@ -51,15 +46,13 @@ function TrainerIcon() {
 // ─── Tab config ───────────────────────────────────────────────────────────────
 
 const TABS = [
-  { href: '/binder',  icon: (active: boolean) => <PokeballIcon active={active} />, label: 'Collection' },
-  { href: '/feed',    icon: (_active: boolean) => <PokedexIcon />,                label: 'Browse'     },
-  { href: '/matches', icon: (_active: boolean) => <TradeIcon />,                  label: 'Trades'     },
-  { href: '/profile', icon: (_active: boolean) => <TrainerIcon />,                label: 'Profile'    },
+  { href: '/binder',  icon: <BinderIcon />,  label: 'Binder'  },
+  { href: '/feed',    icon: <FeedIcon />,    label: 'Feed'    },
+  { href: '/matches', icon: <TradesIcon />,  label: 'Trades'  },
+  { href: '/profile', icon: <ProfileIcon />, label: 'Profile' },
 ] as const
 
 const HIDDEN_PREFIXES = ['/login', '/signup', '/onboarding', '/binder/add-cards']
-
-const SPRING = 'cubic-bezier(0.34, 1.56, 0.64, 1)'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -93,82 +86,57 @@ export default function BottomNav() {
 
   if (isHidden) return null
 
-  const activeIndex = TABS.findIndex(tab =>
-    tab.href === '/matches'
-      ? pathname === '/matches'
-      : pathname.startsWith(tab.href)
-  )
+  // /binder/[username] (someone else's binder) should keep Feed active, not Binder
+  const isOtherUserBinder = (() => {
+    const segs = pathname.split('/').filter(Boolean)
+    return segs[0] === 'binder' && segs.length >= 2 && segs[1] !== 'add-cards' && segs[1] !== 'card'
+  })()
+
+  const activeIndex = TABS.findIndex(tab => {
+    if (tab.href === '/matches') return pathname === '/matches'
+    if (tab.href === '/feed')   return pathname.startsWith('/feed') || isOtherUserBinder
+    if (tab.href === '/binder') return !isOtherUserBinder && pathname.startsWith('/binder')
+    return pathname.startsWith(tab.href)
+  })
 
   return (
     <>
-      <div style={{ height: 'calc(72px + env(safe-area-inset-bottom, 0px))' }} />
+      <div style={{ height: 'calc(68px + env(safe-area-inset-bottom, 0px))' }} />
 
       <nav
         className="fixed bottom-0 left-0 right-0 z-50"
         style={{
-          paddingBottom:          'env(safe-area-inset-bottom, 0px)',
-          background:             'rgba(10, 5, 20, 0.97)',
-          backdropFilter:         'blur(24px)',
-          WebkitBackdropFilter:   'blur(24px)',
-          borderTop:              '1px solid rgba(139, 92, 246, 0.2)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          background:    '#0A0A0A',
+          borderTop:     '2px solid #0A0A0A',
         }}
       >
-        <div className="relative flex h-[72px] max-w-lg mx-auto">
-
-          {/* Sliding electric yellow pill */}
-          {activeIndex >= 0 && (
-            <div
-              aria-hidden
-              className="absolute top-0 bottom-0 flex items-center justify-center pointer-events-none"
-              style={{
-                width:      '25%',
-                left:       `${activeIndex * 25}%`,
-                transition: `left 0.32s ${SPRING}`,
-              }}
-            >
-              <div
-                style={{
-                  width:        82,
-                  height:       46,
-                  borderRadius: 23,
-                  background:   'linear-gradient(135deg, #FFDE00 0%, #F4C430 100%)',
-                  boxShadow:    '0 0 22px rgba(255,222,0,0.55), 0 0 44px rgba(255,222,0,0.2), 0 2px 8px rgba(0,0,0,0.4)',
-                  transition:   `transform 0.32s ${SPRING}`,
-                  transform:    'scale(1.05)',
-                }}
-              />
-            </div>
-          )}
-
+        <div className="flex h-[68px] max-w-lg mx-auto">
           {TABS.map((tab, i) => {
             const isActive = activeIndex === i
             return (
               <Link
                 key={tab.href}
                 href={tab.href}
-                className="flex-1 relative z-10 flex flex-col items-center justify-center gap-[3px] select-none"
+                className="flex-1 relative flex flex-col items-center justify-center gap-[3px] select-none"
               >
-                <div className="relative">
-                  <span
-                    style={{
-                      display:    'block',
-                      color:      isActive ? '#111' : '#6b7280',
-                      opacity:    isActive ? 1 : 0.55,
-                      transform:  isActive ? 'scale(1.08)' : 'scale(0.9)',
-                      transition: `all 0.3s ${SPRING}`,
-                    }}
-                  >
-                    {tab.icon(isActive)}
-                  </span>
+                {/* Active yellow square bg */}
+                {isActive && (
+                  <div
+                    className="absolute inset-[6px] rounded-xl"
+                    style={{ background: '#F4D03F' }}
+                  />
+                )}
 
+                {/* Icon + badge */}
+                <div className="relative z-10">
+                  <span style={{ color: isActive ? '#0A0A0A' : '#6b7280', display: 'block' }}>
+                    {tab.icon}
+                  </span>
                   {tab.href === '/matches' && unreadCount > 0 && (
                     <span
-                      className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 text-black text-[9px] font-black rounded-full flex items-center justify-center px-[3px] leading-none"
-                      style={{
-                        background: '#FFDE00',
-                        animation:  'navBadgePulse 1.8s ease-in-out infinite',
-                        boxShadow:  '0 0 10px rgba(255,222,0,0.7)',
-                      }}
+                      className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] text-white text-[8px] font-black rounded-full flex items-center justify-center px-[3px] leading-none"
+                      style={{ background: '#E8233B', animation: 'navBadgePulse 1.8s ease-in-out infinite' }}
                     >
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
@@ -176,13 +144,13 @@ export default function BottomNav() {
                 </div>
 
                 <span
+                  className="relative z-10"
                   style={{
-                    fontSize:      9,
-                    fontWeight:    isActive ? 800 : 600,
-                    letterSpacing: '0.06em',
-                    lineHeight:    1,
-                    color:         isActive ? '#111' : '#6b7280',
-                    transition:    'color 0.2s ease',
+                    fontSize:   9,
+                    fontWeight: isActive ? 800 : 500,
+                    color:      isActive ? '#0A0A0A' : '#6b7280',
+                    letterSpacing: '0.05em',
+                    lineHeight: 1,
                   }}
                 >
                   {tab.label}

@@ -33,32 +33,6 @@ export interface Seller {
 
 type CountryFilter = 'IN' | 'UAE' | 'BOTH'
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const FLAGS: Record<string, string> = { IN: '🇮🇳', UAE: '🇦🇪' }
-
-const CONDITION_COLOURS: Record<string, string> = {
-  NM: 'text-emerald-400',
-  LP: 'text-lime-400',
-  MP: 'text-yellow-400',
-  HP: 'text-red-400',
-}
-
-// ─── Stars ────────────────────────────────────────────────────────────────────
-
-function Stars({ rating }: { rating: number | null }) {
-  if (rating == null) return <span className="text-zinc-500 text-xs">New trader</span>
-  const filled = Math.min(5, Math.max(0, Math.round(rating)))
-  return (
-    <span>
-      <span className="text-yellow-400 text-xs tracking-tight">
-        {'★'.repeat(filled)}{'☆'.repeat(5 - filled)}
-      </span>
-      <span className="text-zinc-400 text-xs ml-1">{rating.toFixed(1)}</span>
-    </span>
-  )
-}
-
 // ─── Seller card ──────────────────────────────────────────────────────────────
 
 function SellerCard({
@@ -70,64 +44,67 @@ function SellerCard({
   onSwipe: (id: string, username: string, dir: 'LIKE' | 'PASS') => void
   disabled: boolean
 }) {
+  const initials = seller.username[0]?.toUpperCase() ?? '?'
+  const flag = seller.country_code === 'UAE' ? '🇦🇪' : seller.country_code === 'IN' ? '🇮🇳' : ''
+  const rating = seller.trade_rating
+
   return (
     <div
-      className="rounded-3xl overflow-hidden"
+      className="rounded-xl overflow-hidden"
       style={{
-        background:  '#160e20',
-        border:      '1px solid rgba(255,222,0,0.12)',
-        boxShadow:   '0 0 0 1px rgba(124,83,140,0.12), 0 4px 24px rgba(0,0,0,0.4)',
-        borderTop:   '2.5px solid rgba(255,222,0,0.35)',
+        background:  '#FAF6EC',
+        border:      '2px solid #0A0A0A',
+        boxShadow:   '4px 4px 0 #E8233B',
       }}
     >
-
       {/* Profile header */}
-      <div className="p-4 pb-3">
-        <div className="flex items-start gap-3">
-          <div className="relative w-12 h-12 flex-shrink-0">
+      <div
+        className="p-4 pb-3"
+        style={{ borderBottom: '2px solid #0A0A0A' }}
+      >
+        <div className="flex items-center gap-3">
+          {/* Avatar */}
+          <div
+            className="relative w-12 h-12 flex-shrink-0 overflow-hidden"
+            style={{ border: '2px solid #0A0A0A', boxShadow: '2px 2px 0 #0A0A0A' }}
+          >
             {seller.avatar_url ? (
-              <Image
-                src={seller.avatar_url}
-                alt={seller.username}
-                fill
-                className="rounded-full object-cover"
-                unoptimized
-              />
+              <Image src={seller.avatar_url} alt={seller.username} fill className="object-cover" unoptimized />
             ) : (
               <div
-                className="w-12 h-12 rounded-full flex items-center justify-center"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255,222,0,0.2), rgba(255,107,53,0.15))',
-                  border:     '1.5px solid rgba(255,222,0,0.35)',
-                  boxShadow:  '0 0 10px rgba(255,222,0,0.15)',
-                }}
+                className="w-full h-full flex items-center justify-center font-black text-base"
+                style={{ background: '#E8233B', color: '#FAF6EC' }}
               >
-                <span className="font-black text-base uppercase" style={{ color: '#FFDE00' }}>
-                  {seller.username[0]}
-                </span>
+                {initials}
               </div>
             )}
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-white font-black text-sm leading-tight">@{seller.username}</span>
-              <span className="text-base leading-none">{FLAGS[seller.country_code] ?? ''}</span>
+              <span className="font-black text-sm" style={{ color: '#0A0A0A' }}>@{seller.username}</span>
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#F4D03F', border: '1.5px solid #0A0A0A', color: '#0A0A0A', fontSize: 9 }}>
+                VERIFIED
+              </span>
+              <span className="text-sm">{flag}</span>
             </div>
-            <p className="text-zinc-500 text-xs mt-0.5 line-clamp-1">
+            <p className="text-xs mt-0.5" style={{ color: '#8B7866' }}>
               {[seller.city, `${seller.card_count} cards available`].filter(Boolean).join(' · ')}
             </p>
-            <div className="mt-1">
-              <Stars rating={seller.trade_rating} />
-            </div>
+            {rating != null && (
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="text-xs" style={{ color: '#F4D03F' }}>{'★'.repeat(Math.round(Math.min(5, Math.max(0, rating))))}</span>
+                <span className="text-[10px]" style={{ color: '#8B7866' }}>{rating.toFixed(1)}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Horizontal card strip */}
       <div
-        className="flex gap-2 px-4 pb-4 overflow-x-auto"
-        style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+        className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-none"
+        style={{ borderBottom: '2px solid #0A0A0A', scrollSnapType: 'x mandatory' } as React.CSSProperties}
       >
         {seller.preview_cards.map(item => (
           <div
@@ -136,7 +113,10 @@ function SellerCard({
             style={{ scrollSnapAlign: 'start' }}
           >
             <Link href={`/binder/card/${encodeURIComponent(item.cards?.id ?? '')}`}>
-              <div className="relative w-[72px] h-[100px] rounded-xl overflow-hidden" style={{ background: '#1a1028' }}>
+              <div
+                className="relative w-[72px] h-[100px] overflow-hidden"
+                style={{ background: '#f0ece2', border: '2px solid #0A0A0A' }}
+              >
                 {item.cards?.image_url && (
                   <Image
                     src={item.cards.image_url}
@@ -149,63 +129,64 @@ function SellerCard({
                 )}
               </div>
             </Link>
-            <p className="text-[10px] text-zinc-400 mt-1 leading-tight line-clamp-1 text-center">
+            <p className="text-[9px] font-bold mt-1 leading-tight line-clamp-1 text-center" style={{ color: '#0A0A0A' }}>
               {item.cards?.name}
             </p>
             {item.condition && (
-              <p className={`text-[9px] font-bold text-center ${CONDITION_COLOURS[item.condition] ?? 'text-zinc-500'}`}>
-                {item.condition}
-              </p>
+              <p className="text-[8px] font-black text-center" style={{ color: '#8B7866' }}>{item.condition}</p>
             )}
             {item.usd_price != null && (
-              <p className="text-[9px] font-bold text-center" style={{ color: '#FFDE00' }}>
+              <p className="text-[9px] font-black text-center" style={{ color: '#E8233B' }}>
                 ${item.usd_price.toFixed(2)}
               </p>
             )}
           </div>
         ))}
+
+        {/* "+N more" placeholder */}
+        {seller.card_count > seller.preview_cards.length && (
+          <div
+            className="flex-shrink-0 w-[72px] h-[100px] flex flex-col items-center justify-center gap-1"
+            style={{ border: '2px dashed #0A0A0A', background: '#f0ece2' }}
+          >
+            <span className="font-black text-sm" style={{ color: '#0A0A0A' }}>+{seller.card_count - seller.preview_cards.length}</span>
+            <span className="text-[8px] uppercase tracking-wider" style={{ color: '#8B7866' }}>VIEW</span>
+          </div>
+        )}
       </div>
 
-      {/* View collection link */}
-      <div className="px-4 pb-3.5">
+      {/* View collection */}
+      <div className="px-4 py-2.5" style={{ borderBottom: '2px solid #0A0A0A' }}>
         <Link
           href={`/binder/${seller.username}`}
-          className="text-yellow-400 hover:text-yellow-300 text-xs font-bold transition-colors"
+          className="text-xs font-black uppercase tracking-wider"
+          style={{ color: '#E8233B' }}
         >
           View Full Collection →
         </Link>
       </div>
 
       {/* Pass / Interested */}
-      <div className="grid grid-cols-2 gap-3 px-4 py-4">
+      <div className="grid grid-cols-2">
         <button
           onClick={() => onSwipe(seller.id, seller.username, 'PASS')}
           disabled={disabled}
-          className="py-4 flex items-center justify-center gap-2 rounded-2xl text-sm font-black transition-all disabled:opacity-30"
+          className="py-4 flex items-center justify-center gap-2 text-sm font-black transition-all disabled:opacity-30"
           style={{
-            background: 'rgba(238,21,21,0.1)',
-            border:     '1px solid rgba(238,21,21,0.25)',
-            color:      '#f87171',
+            borderRight:  '2px solid #0A0A0A',
+            background:   '#FAF6EC',
+            color:        '#0A0A0A',
           }}
-          onMouseEnter={e => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 16px rgba(238,21,21,0.35)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none' }}
         >
-          <span className="text-lg">✕</span> Pass
+          <span>✕</span> PASS
         </button>
         <button
           onClick={() => onSwipe(seller.id, seller.username, 'LIKE')}
           disabled={disabled}
-          className="py-4 flex items-center justify-center gap-2 rounded-2xl text-sm font-black transition-all disabled:opacity-30"
-          style={{
-            background: 'linear-gradient(135deg, rgba(255,222,0,0.18) 0%, rgba(255,107,53,0.18) 100%)',
-            border:     '1px solid rgba(255,222,0,0.3)',
-            color:      '#FFDE00',
-            boxShadow:  '0 0 14px rgba(255,222,0,0.12)',
-          }}
-          onMouseEnter={e => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 20px rgba(255,222,0,0.35)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 14px rgba(255,222,0,0.12)' }}
+          className="py-4 flex items-center justify-center gap-2 text-sm font-black transition-all disabled:opacity-30"
+          style={{ background: '#E8233B', color: '#FAF6EC' }}
         >
-          <span className="text-lg">♥</span> Interested
+          <span>♥</span> INTERESTED
         </button>
       </div>
     </div>
@@ -225,11 +206,11 @@ export default function FeedClient({
 }) {
   const router = useRouter()
 
-  const [sellers, setSellers]           = useState<Seller[]>(initialSellers)
-  const [countryFilter, setCountryFilter] = useState<CountryFilter>(defaultFilter as CountryFilter)
-  const [searchQuery, setSearchQuery]   = useState('')
-  const [swipingId, setSwipingId]       = useState<string | null>(null)
-  const [toast, setToast]               = useState<string | null>(null)
+  const [sellers, setSellers]               = useState<Seller[]>(initialSellers)
+  const [countryFilter, setCountryFilter]   = useState<CountryFilter>(defaultFilter as CountryFilter)
+  const [searchQuery, setSearchQuery]       = useState('')
+  const [swipingId, setSwipingId]           = useState<string | null>(null)
+  const [toast, setToast]                   = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function showToast(msg: string) {
@@ -241,8 +222,6 @@ export default function FeedClient({
   const handleSwipe = useCallback(async (sellerId: string, sellerUsername: string, dir: 'LIKE' | 'PASS') => {
     if (swipingId) return
     setSwipingId(sellerId)
-
-    // Optimistic remove
     setSellers(prev => prev.filter(s => s.id !== sellerId))
 
     try {
@@ -252,20 +231,18 @@ export default function FeedClient({
         body: JSON.stringify({ swiped_id: sellerId }),
       })
       const data = await res.json() as { success?: boolean; matchId?: string | null; error?: string }
-      console.log('[feed] swipe response:', data)
 
       if (!res.ok || data.error) {
         showToast(`Error: ${data.error ?? 'swipe failed'}`)
       } else if (dir === 'LIKE') {
         if (data.matchId) {
-          showToast(`Trade request sent to @${sellerUsername}! Say hi to get started.`)
+          showToast(`Trade request sent to @${sellerUsername}!`)
           setTimeout(() => router.push(`/matches/${data.matchId}`), 1600)
         } else {
           showToast(`Interested sent — waiting for @${sellerUsername} to match back.`)
         }
       }
-    } catch (err) {
-      console.error('[feed] swipe fetch error:', err)
+    } catch {
       showToast('Something went wrong — please try again.')
     }
 
@@ -277,88 +254,100 @@ export default function FeedClient({
     router.push('/login')
   }
 
-  // ── Country + search filter (client-side on already-fetched data) ─────────
   const visibleSellers = (() => {
     const afterCountry = countryFilter === 'BOTH'
       ? sellers
       : sellers.filter(s => s.country_code?.toUpperCase() === countryFilter)
-
     const q = searchQuery.trim().toLowerCase()
     return q
-      ? afterCountry.filter(s =>
-          s.preview_cards.some(c => c.cards?.name?.toLowerCase().includes(q))
-        )
+      ? afterCountry.filter(s => s.preview_cards.some(c => c.cards?.name?.toLowerCase().includes(q)))
       : afterCountry
   })()
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <main className="min-h-screen pb-28" style={{ background: 'radial-gradient(ellipse at 50% -10%, #2d1060 0%, #1a0830 40%, #0a0514 100%)' }}>
+    <main className="min-h-screen pb-28" style={{ background: '#FAF6EC' }}>
 
       {/* Sticky header */}
       <div
-        className="sticky top-0 z-20 backdrop-blur-sm px-4 py-3"
-        style={{ background: 'rgba(10,5,20,0.96)', borderBottom: '1px solid rgba(139,92,246,0.18)' }}
+        className="sticky top-0 z-20 px-4 py-3"
+        style={{ background: '#FAF6EC', borderBottom: '2px solid #0A0A0A' }}
       >
         <div className="max-w-lg mx-auto space-y-3">
 
-          {/* Nav */}
+          {/* Nav row */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center shadow-md shadow-yellow-400/20">
-                <span className="text-xs font-black text-black">PT</span>
-              </div>
-              <span className="text-white font-black text-base tracking-tight">projecttrading</span>
+            <div>
+              <h1 className="font-black text-xl leading-none" style={{ color: '#0A0A0A' }}>Find traders</h1>
+              <p className="text-xs mt-0.5" style={{ color: '#8B7866' }}>
+                {visibleSellers.length} new in your region
+              </p>
             </div>
-            <div className="flex items-center gap-4">
-              <Link href="/binder" className="text-xs font-bold text-zinc-500 hover:text-yellow-400 transition-colors uppercase tracking-widest">
+            <div className="flex items-center gap-3">
+              <Link href="/binder" className="text-xs font-black uppercase tracking-widest" style={{ color: '#8B7866' }}>
                 Binder
-              </Link>
-              <Link href="/matches" className="text-xs font-bold text-zinc-500 hover:text-yellow-400 transition-colors uppercase tracking-widest">
-                Matches
               </Link>
               <button
                 onClick={handleSignOut}
-                className="text-xs font-bold text-zinc-500 hover:text-yellow-400 transition-colors uppercase tracking-widest"
+                className="text-xs font-black uppercase tracking-widest"
+                style={{ color: '#8B7866' }}
               >
                 Sign out
               </button>
+              {/* Filter button */}
+              <div
+                className="w-9 h-9 flex items-center justify-center font-black text-sm"
+                style={{ background: '#F4D03F', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A' }}
+              >
+                ≡
+              </div>
             </div>
           </div>
 
-          {/* Country toggle */}
-          <div className="flex gap-2">
-            {(['IN', 'UAE', 'BOTH'] as CountryFilter[]).map(c => (
+          {/* Country tabs */}
+          <div
+            className="grid grid-cols-3 overflow-hidden"
+            style={{ border: '2px solid #0A0A0A' }}
+          >
+            {(['IN', 'UAE', 'BOTH'] as CountryFilter[]).map((c, i, arr) => (
               <button
                 key={c}
                 onClick={() => setCountryFilter(c)}
-                className="flex-1 py-1.5 rounded-xl text-xs font-black transition-all"
-                style={countryFilter === c
-                  ? { background: 'linear-gradient(135deg, #FFDE00, #F4C430)', color: '#111', boxShadow: '0 0 14px rgba(255,222,0,0.3)' }
-                  : { background: '#2a1f3a', color: '#a1a1aa', border: '1px solid rgba(139,92,246,0.2)' }
-                }
+                className="py-2 text-xs font-black uppercase tracking-wide transition-all"
+                style={{
+                  background:  countryFilter === c ? '#F4D03F' : '#FAF6EC',
+                  color:       '#0A0A0A',
+                  borderRight: i < arr.length - 1 ? '2px solid #0A0A0A' : 'none',
+                }}
               >
                 {c === 'IN' ? '🇮🇳 India' : c === 'UAE' ? '🇦🇪 UAE' : 'Both'}
               </button>
             ))}
           </div>
 
-          {/* Search */}
-          <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">🔍</span>
+          {/* Search bar */}
+          <div className="relative" style={{ border: '2px solid #0A0A0A', background: '#FAF6EC' }}>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm pointer-events-none" style={{ color: '#8B7866' }}>🔍</span>
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search by card name…"
-              className="w-full text-white placeholder-zinc-600 rounded-xl pl-9 pr-9 py-2.5 text-sm focus:outline-none transition-all"
-              style={{ background: '#2a1f3a', border: '1px solid rgba(139,92,246,0.3)' }}
+              className="w-full pl-9 pr-16 py-2.5 text-sm focus:outline-none bg-transparent"
+              style={{ color: '#0A0A0A' }}
             />
+            <div
+              className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-3 text-[10px] font-black uppercase"
+              style={{ background: '#E8233B', color: '#FAF6EC', borderLeft: '2px solid #0A0A0A' }}
+            >
+              FILTERS
+            </div>
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-xs"
+                className="absolute right-16 top-1/2 -translate-y-1/2 text-xs font-black"
+                style={{ color: '#0A0A0A' }}
               >
                 ✕
               </button>
@@ -369,15 +358,15 @@ export default function FeedClient({
       </div>
 
       {/* Feed */}
-      <div className="max-w-lg mx-auto px-4 pt-5 space-y-4">
+      <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
         {visibleSellers.length === 0 ? (
           <div
-            className="rounded-2xl p-10 text-center mt-4"
-            style={{ background: 'linear-gradient(135deg, #1e1035, #160e20)', border: '1px solid rgba(255,222,0,0.15)', boxShadow: '0 0 30px rgba(124,83,140,0.12)' }}
+            className="rounded-xl p-10 text-center mt-4"
+            style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
           >
             <span className="text-5xl mb-4 block">🔍</span>
-            <h2 className="text-white font-black text-lg mb-2">No traders found here</h2>
-            <p className="text-zinc-500 text-sm leading-relaxed">
+            <h2 className="font-black text-lg mb-2" style={{ color: '#0A0A0A' }}>No traders found here</h2>
+            <p className="text-sm leading-relaxed" style={{ color: '#8B7866' }}>
               {sellers.length > 0
                 ? `${sellers.length} trader${sellers.length !== 1 ? 's' : ''} found — try switching to Both countries.`
                 : 'No traders have added cards yet. Check back soon!'}
@@ -385,7 +374,8 @@ export default function FeedClient({
             {sellers.length > 0 && countryFilter !== 'BOTH' && (
               <button
                 onClick={() => setCountryFilter('BOTH')}
-                className="mt-5 text-yellow-400 hover:text-yellow-300 text-sm font-bold transition-colors"
+                className="mt-5 text-sm font-black"
+                style={{ color: '#E8233B' }}
               >
                 Show all countries →
               </button>
@@ -406,12 +396,12 @@ export default function FeedClient({
       {/* Toast */}
       {toast && (
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 text-sm font-semibold px-5 py-3 rounded-2xl shadow-xl backdrop-blur-sm max-w-xs w-[calc(100%-3rem)] text-center"
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 text-sm font-black px-5 py-3 rounded max-w-xs w-[calc(100%-3rem)] text-center"
           style={{
-            background: 'rgba(22, 14, 32, 0.95)',
-            border:     '1px solid rgba(52,211,153,0.35)',
-            color:      '#6ee7b7',
-            boxShadow:  '0 0 20px rgba(52,211,153,0.15), 0 8px 32px rgba(0,0,0,0.5)',
+            background:  '#0A0A0A',
+            color:       '#FAF6EC',
+            border:      '2px solid #0A0A0A',
+            boxShadow:   '4px 4px 0 #E8233B',
           }}
         >
           {toast}
