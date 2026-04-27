@@ -597,13 +597,14 @@ export default function AddCardsPage() {
       }
 
       const { error: ucErr } = await supabase.from('user_cards').insert({
-        user_id:         userId,
-        card_id:         cardId,
-        list_type:       'HAVE',
-        added_via:       'manual',
-        grading_company: grading.company,
-        grade:           grading.grade,
-        grade_label:     grading.grade_label,
+        user_id:          userId,
+        card_id:          cardId,
+        list_type:        'HAVE',
+        added_via:        'manual',
+        grading_company:  grading.company,
+        grade:            grading.grade,
+        grade_label:      grading.grade_label,
+        added_price_usd:  usdPrice ?? null,
       })
       if (ucErr) throw ucErr
 

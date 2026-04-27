@@ -3,7 +3,9 @@
 import { useRef, useState } from 'react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
-import GradingSelector, { GradingSelection, DEFAULT_GRADING } from '@/components/GradingSelector'
+import GradingSelector, { GradingCompany, GradingSelection, DEFAULT_GRADING } from '@/components/GradingSelector'
+import { useCountry } from '@/lib/context/CountryContext'
+import { formatPriceFromUSD } from '@/lib/currency'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -95,6 +97,41 @@ function extractMarketPrice(card: PptCard): number | null {
   return card.prices?.market ?? null
 }
 
+// Grade multipliers: estimated value relative to raw market price
+function getGradeMultiplier(company: GradingCompany, grade: number | null): number {
+  if (company === 'RAW' || grade === null) return 1
+  if (company === 'PSA') {
+    if (grade === 10) return 4.0
+    if (grade === 9)  return 1.8
+    if (grade === 8)  return 1.2
+    if (grade === 7)  return 1.0
+    if (grade >= 5)   return 0.85
+    return 0.7
+  }
+  if (company === 'BGS') {
+    if (grade === 10)  return 5.0
+    if (grade >= 9.5)  return 3.5
+    if (grade >= 9)    return 1.8
+    if (grade >= 8.5)  return 1.3
+    if (grade >= 8)    return 1.1
+    return 0.9
+  }
+  if (company === 'CGC') {
+    if (grade === 10)  return 2.8
+    if (grade >= 9.5)  return 2.2
+    if (grade >= 9)    return 1.5
+    if (grade >= 8)    return 1.1
+    return 0.9
+  }
+  if (company === 'TAG') {
+    if (grade === 10) return 3.5
+    if (grade >= 9)   return 1.8
+    if (grade >= 8)   return 1.2
+    return 1.0
+  }
+  return 1
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ScanCardModal({
@@ -115,6 +152,7 @@ export default function ScanCardModal({
   const [isFoil, setIsFoil]           = useState(false)
   const [errorMsg, setErrorMsg]       = useState('')
   const [grading, setGrading]         = useState<GradingSelection>(DEFAULT_GRADING)
+  const { countryCode } = useCountry()
 
   function reset() {
     setScanState('idle')
@@ -134,31 +172,25 @@ export default function ScanCardModal({
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-
     setScanState('identifying')
     setGrading(DEFAULT_GRADING)
-
     try {
       const imageBase64 = await resizeToBase64(file)
-
       const res = await fetch('/api/scan-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64 }),
       })
-
       if (res.status === 404) {
         setScanState('error')
         setErrorMsg("Couldn't identify this card. Try better lighting or use the search instead.")
         return
       }
-
       if (!res.ok) {
         setScanState('error')
         setErrorMsg('Something went wrong. Please try again.')
         return
       }
-
       const { card, is_foil, scan_result } = await res.json()
       setMatchedCard(card)
       setScanResult(scan_result ?? null)
@@ -174,7 +206,6 @@ export default function ScanCardModal({
   async function handleConfirmAdd() {
     if (!matchedCard) return
     setScanState('adding')
-
     try {
       const cardId = String(matchedCard.tcgPlayerId ?? '')
       if (!cardId) throw new Error('Card has no ID')
@@ -215,8 +246,6 @@ export default function ScanCardModal({
 
       const marketPrice = extractMarketPrice(matchedCard)
       if (marketPrice != null) {
-        // Use fallback rates for INR/AED — refresh-price will overwrite with live rates
-        // when the card next goes stale (24h), but this ensures the total shows immediately.
         const INR_RATE = 83.5
         const AED_RATE = 3.67
         await supabase.from('card_prices').upsert(
@@ -231,6 +260,10 @@ export default function ScanCardModal({
         )
       }
 
+      // Store graded price as the baseline so GAIN reflects actual card value
+      const gradeMultiplier = getGradeMultiplier(grading.company, grading.grade)
+      const gradedPrice = marketPrice != null ? marketPrice * gradeMultiplier : null
+
       const { data: existing } = await supabase
         .from('user_cards')
         .select('id')
@@ -241,14 +274,15 @@ export default function ScanCardModal({
 
       if (!existing) {
         const { error: ucErr } = await supabase.from('user_cards').insert({
-          user_id:         userId,
-          card_id:         cardId,
-          list_type:       'HAVE',
-          added_via:       'scan',
-          is_foil:         isFoil,
-          grading_company: grading.company,
-          grade:           grading.grade,
-          grade_label:     grading.grade_label,
+          user_id:          userId,
+          card_id:          cardId,
+          list_type:        'HAVE',
+          added_via:        'scan',
+          is_foil:          isFoil,
+          grading_company:  grading.company,
+          grade:            grading.grade,
+          grade_label:      grading.grade_label,
+          added_price_usd:  gradedPrice ?? null,
         })
         if (ucErr) throw ucErr
       }
@@ -267,137 +301,155 @@ export default function ScanCardModal({
   return (
     <>
       {/* Backdrop */}
-      <div
-        onClick={handleClose}
-        className="fixed inset-0 bg-black/70 z-50 backdrop-blur-sm"
-      />
+      <div onClick={handleClose} style={{ position: 'fixed', inset: 0, background: 'rgba(10,10,10,0.7)', zIndex: 50 }} />
 
-      {/* Modal — top-anchored so grading selector has room to breathe */}
-      <div
-        className="fixed inset-x-4 top-[4%] z-50 max-w-sm mx-auto bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ maxHeight: '92vh' }}
-      >
+      {/* Modal */}
+      <div style={{
+        position: 'fixed', inset: '0 16px', top: '5%', zIndex: 51,
+        maxWidth: 440, margin: '0 auto',
+        background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '6px 6px 0 #0A0A0A',
+        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+      }}>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 flex-shrink-0">
-          <h2 className="text-white font-black text-base tracking-tight">📷 Scan Card</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '2px solid #0A0A0A', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 32, height: 32, background: '#E8233B', border: '2px solid #0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, boxShadow: '2px 2px 0 #0A0A0A' }}>
+              📷
+            </div>
+            <h2 style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16, margin: 0 }}>Scan Card</h2>
+          </div>
           <button
             onClick={handleClose}
-            className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors text-sm"
+            style={{ width: 28, height: 28, background: '#0A0A0A', border: 'none', color: '#FAF6EC', fontWeight: 900, fontSize: 12, cursor: 'pointer' }}
           >
             ✕
           </button>
         </div>
 
         {/* Scrollable content */}
-        <div className="p-5 overflow-y-auto flex-1">
+        <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
 
-          {/* ── idle ────────────────────────────────────────── */}
+          {/* ── idle ──────────────────────────────────────────── */}
           {scanState === 'idle' && (
-            <div className="text-center py-4">
-              <div className="w-20 h-20 rounded-full bg-zinc-800 border-2 border-dashed border-zinc-700 flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl">📷</span>
+            <div style={{ textAlign: 'center', paddingTop: 16 }}>
+              <div style={{
+                width: 80, height: 80, margin: '0 auto 20px',
+                background: '#F4D03F', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32,
+              }}>
+                📷
               </div>
-              <h3 className="text-white font-black text-lg mb-1">Take a photo</h3>
-              <p className="text-zinc-500 text-sm mb-6 leading-relaxed">
+              <h3 style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 18, margin: '0 0 8px' }}>Take a photo</h3>
+              <p style={{ color: '#8B7866', fontSize: 13, lineHeight: 1.6, margin: '0 0 24px' }}>
                 Point your camera at a Pokémon card. Make sure the card name and number are clearly visible.
               </p>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-black font-black rounded-xl py-3 text-sm tracking-wide transition-colors shadow-lg shadow-yellow-400/20"
+                style={{ width: '100%', padding: '14px 0', background: '#E8233B', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A', color: '#FAF6EC', fontWeight: 900, fontSize: 14, letterSpacing: '0.05em', cursor: 'pointer' }}
               >
-                Open Camera
+                OPEN CAMERA
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleFileChange}
-                className="hidden"
-              />
+              <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileChange} style={{ display: 'none' }} />
             </div>
           )}
 
-          {/* ── identifying ─────────────────────────────────── */}
+          {/* ── identifying ───────────────────────────────────── */}
           {scanState === 'identifying' && (
-            <div className="text-center py-10">
-              <div className="w-12 h-12 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin mx-auto mb-5" />
-              <p className="text-white font-black text-base">Identifying your card…</p>
-              <p className="text-zinc-500 text-sm mt-1">Asking GPT-4o to read the card</p>
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <div style={{ width: 36, height: 36, border: '3px solid #0A0A0A', borderTopColor: '#E8233B', borderRadius: '50%', animation: 'scanSpin 0.8s linear infinite', margin: '0 auto 20px' }} />
+              <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 15, margin: '0 0 4px' }}>Identifying your card…</p>
+              <p style={{ color: '#8B7866', fontSize: 12 }}>Asking GPT-4o to read the card</p>
+              <style>{`@keyframes scanSpin { to { transform: rotate(360deg); } }`}</style>
             </div>
           )}
 
-          {/* ── matched ─────────────────────────────────────── */}
+          {/* ── matched ───────────────────────────────────────── */}
           {scanState === 'matched' && matchedCard && (
-            <div className="space-y-5">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* Confidence label */}
+              <p style={{
+                textAlign: 'center', fontSize: 10, fontWeight: 800,
+                textTransform: 'uppercase', letterSpacing: '0.1em',
+                color: matchedCard.lowConfidence ? '#E8233B' : '#8B7866',
+                margin: 0,
+              }}>
+                {matchedCard.lowConfidence ? '⚠ Possible match — confirm below' : 'Is this your card?'}
+              </p>
+
               {/* Card preview */}
-              <div>
-                <p className={`text-xs font-bold uppercase tracking-widest mb-3 text-center ${matchedCard.lowConfidence ? 'text-amber-400' : 'text-zinc-400'}`}>
-                  {matchedCard.lowConfidence
-                    ? 'We found a possible match — is this your card?'
-                    : 'Is this your card?'}
-                </p>
-                <div className="flex gap-4">
-                  <div className="relative w-20 flex-shrink-0 rounded-xl overflow-hidden bg-zinc-800" style={{ height: 112 }}>
+              <div style={{ display: 'flex', gap: 14 }}>
+                <div style={{ width: 80, flexShrink: 0, border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', background: '#f0ece2', overflow: 'hidden', position: 'relative' }}>
+                  <div style={{ aspectRatio: '2.5/3.5', position: 'relative' }}>
                     {getImageUrl(matchedCard) ? (
-                      <Image
-                        src={getImageUrl(matchedCard)}
-                        alt={matchedCard.name ?? 'Card'}
-                        width={80}
-                        height={112}
-                        className="object-contain p-1 w-full h-full"
-                        style={{ transform: 'none' }}
-                        unoptimized
-                      />
+                      <Image src={getImageUrl(matchedCard)} alt={matchedCard.name ?? 'Card'} fill className="object-contain p-1.5" unoptimized />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-zinc-600 text-2xl">🃏</div>
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, opacity: 0.3 }}>🃏</div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0 pt-1">
-                    <p className="text-white font-black text-sm leading-tight">{matchedCard.name}</p>
-                    <p className="text-zinc-400 text-xs mt-1 line-clamp-1">{matchedCard.setName}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      {(matchedCard.cardNumber ?? matchedCard.number) && (
-                        <span className="text-zinc-300 text-xs font-bold">
-                          #{matchedCard.cardNumber ?? matchedCard.number}
-                        </span>
-                      )}
-                      {matchedCard.setId && (
-                        <span className="text-zinc-500 text-xs font-mono uppercase">{matchedCard.setId}</span>
-                      )}
-                    </div>
-                    {scanResult?.card_number && scanResult.card_number !== (matchedCard.cardNumber ?? matchedCard.number) && (
-                      <p className="text-amber-500/70 text-xs mt-0.5">Scanned: {scanResult.card_number}</p>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 15, margin: '0 0 3px', lineHeight: 1.3 }}>{matchedCard.name}</p>
+                  <p style={{ color: '#8B7866', fontSize: 12, margin: '0 0 6px' }}>{matchedCard.setName}</p>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {(matchedCard.cardNumber ?? matchedCard.number) && (
+                      <span style={{ background: '#0A0A0A', color: '#FAF6EC', fontSize: 9, fontWeight: 900, padding: '2px 6px' }}>
+                        #{matchedCard.cardNumber ?? matchedCard.number}
+                      </span>
                     )}
                     {matchedCard.rarity && (
-                      <p className="text-yellow-500/70 text-xs mt-0.5">{matchedCard.rarity}</p>
+                      <span style={{ background: '#F4D03F', color: '#0A0A0A', fontSize: 9, fontWeight: 900, padding: '2px 6px', border: '1px solid #0A0A0A' }}>
+                        {matchedCard.rarity}
+                      </span>
                     )}
                     {isFoil && (
-                      <span className="inline-block mt-1.5 text-[9px] font-black px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 uppercase tracking-wide">
-                        Foil
+                      <span style={{ background: '#F4D03F', color: '#0A0A0A', fontSize: 9, fontWeight: 900, padding: '2px 6px', border: '1px solid #0A0A0A' }}>
+                        ✦ FOIL
                       </span>
                     )}
                   </div>
+                  {scanResult?.card_number && scanResult.card_number !== String(matchedCard.cardNumber ?? matchedCard.number) && (
+                    <p style={{ color: '#E8233B', fontSize: 10, margin: '6px 0 0' }}>Scanned: {scanResult.card_number}</p>
+                  )}
+                  {matchedCard.prices?.market != null && (() => {
+                    const raw = matchedCard.prices!.market!
+                    const multiplier = getGradeMultiplier(grading.company, grading.grade)
+                    const effectiveUsd = raw * multiplier
+                    const isGraded = grading.company !== 'RAW' && grading.grade !== null
+                    return (
+                      <div style={{ marginTop: 8 }}>
+                        <p style={{ color: '#E8233B', fontWeight: 900, fontSize: 14, margin: 0 }}>
+                          {formatPriceFromUSD(effectiveUsd, countryCode)}
+                        </p>
+                        <p style={{ color: '#8B7866', fontSize: 10, fontWeight: 700, margin: '2px 0 0' }}>
+                          {isGraded
+                            ? `Est. ${grading.company} ${grading.grade} · Raw: ${formatPriceFromUSD(raw, countryCode)}`
+                            : 'Market price'}
+                        </p>
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
 
               {/* Divider */}
-              <div className="border-t border-zinc-800" />
+              <div style={{ borderTop: '2px solid #0A0A0A' }} />
 
               {/* Grading selector */}
               <GradingSelector value={grading} onChange={setGrading} />
 
               {/* Actions */}
-              <div className="space-y-2 pt-1">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <button
                   onClick={handleConfirmAdd}
-                  className="w-full bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-black font-black rounded-xl py-3 text-sm tracking-wide transition-colors shadow-lg shadow-yellow-400/20"
+                  style={{ width: '100%', padding: '14px 0', background: '#E8233B', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A', color: '#FAF6EC', fontWeight: 900, fontSize: 14, letterSpacing: '0.05em', cursor: 'pointer' }}
                 >
-                  Add to My Collection
+                  ADD TO COLLECTION
                 </button>
                 <button
                   onClick={reset}
-                  className="w-full text-zinc-500 hover:text-zinc-300 text-sm py-2 transition-colors"
+                  style={{ width: '100%', padding: '10px 0', background: 'none', border: '2px solid #0A0A0A', color: '#0A0A0A', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
                 >
                   Try Again
                 </button>
@@ -405,53 +457,64 @@ export default function ScanCardModal({
             </div>
           )}
 
-          {/* ── adding ──────────────────────────────────────── */}
+          {/* ── adding ────────────────────────────────────────── */}
           {scanState === 'adding' && (
-            <div className="text-center py-10">
-              <div className="w-12 h-12 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin mx-auto mb-5" />
-              <p className="text-white font-bold">Adding to your collection…</p>
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <div style={{ width: 36, height: 36, border: '3px solid #0A0A0A', borderTopColor: '#E8233B', borderRadius: '50%', animation: 'scanSpin 0.8s linear infinite', margin: '0 auto 20px' }} />
+              <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 15 }}>Adding to your collection…</p>
             </div>
           )}
 
-          {/* ── added ───────────────────────────────────────── */}
+          {/* ── added ─────────────────────────────────────────── */}
           {scanState === 'added' && matchedCard && (
-            <div className="text-center py-6">
-              <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl text-emerald-400">✓</span>
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <div style={{
+                width: 64, height: 64, margin: '0 auto 16px',
+                background: '#F4D03F', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 28, fontWeight: 900, color: '#0A0A0A',
+              }}>
+                ✓
               </div>
-              <p className="text-white font-black text-lg mb-1">Card Added!</p>
-              <p className="text-zinc-400 text-sm mb-6 line-clamp-1">
+              <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 18, margin: '0 0 6px' }}>Card Added!</p>
+              <p style={{ color: '#8B7866', fontSize: 13, margin: '0 0 24px' }}>
                 {matchedCard.name} is now in your binder.
               </p>
               <button
                 onClick={handleClose}
-                className="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-black rounded-xl py-3 text-sm tracking-wide transition-colors"
+                style={{ width: '100%', padding: '14px 0', background: '#E8233B', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A', color: '#FAF6EC', fontWeight: 900, fontSize: 14, letterSpacing: '0.05em', cursor: 'pointer' }}
               >
-                Done
+                DONE
               </button>
             </div>
           )}
 
-          {/* ── error ───────────────────────────────────────── */}
+          {/* ── error ─────────────────────────────────────────── */}
           {scanState === 'error' && (
-            <div className="text-center py-4">
-              <div className="w-14 h-14 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">⚠️</span>
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <div style={{
+                width: 64, height: 64, margin: '0 auto 16px',
+                background: '#FAF6EC', border: '2px solid #E8233B', boxShadow: '4px 4px 0 #E8233B',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
+              }}>
+                ⚠️
               </div>
-              <p className="text-white font-bold text-base mb-2">Scan Failed</p>
-              <p className="text-zinc-400 text-sm mb-6 leading-relaxed">{errorMsg}</p>
-              <button
-                onClick={reset}
-                className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl py-2.5 text-sm transition-colors mb-2"
-              >
-                Try Again
-              </button>
-              <button
-                onClick={handleClose}
-                className="w-full text-zinc-600 hover:text-zinc-400 text-sm py-2 transition-colors"
-              >
-                Cancel
-              </button>
+              <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16, margin: '0 0 8px' }}>Scan Failed</p>
+              <p style={{ color: '#8B7866', fontSize: 13, lineHeight: 1.6, margin: '0 0 24px' }}>{errorMsg}</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button
+                  onClick={reset}
+                  style={{ width: '100%', padding: '14px 0', background: '#E8233B', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A', color: '#FAF6EC', fontWeight: 900, fontSize: 14, letterSpacing: '0.05em', cursor: 'pointer' }}
+                >
+                  TRY AGAIN
+                </button>
+                <button
+                  onClick={handleClose}
+                  style={{ width: '100%', padding: '10px 0', background: 'none', border: '2px solid #0A0A0A', color: '#0A0A0A', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
 

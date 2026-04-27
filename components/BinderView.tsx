@@ -37,6 +37,7 @@ interface CollectionItem {
   grading_company: string | null
   grade: number | null
   grade_label: string | null
+  added_price_usd: number | null
   cards: CardData
 }
 
@@ -88,11 +89,15 @@ function CardTile({
   countryCode: string
   onDelete: (userCardId: string) => void
 }) {
-  const condition = item.condition ?? 'NM'
-  const priceData = item.cards.card_prices?.[0]
-  const usdPrice  = priceData?.usd_price ?? null
+  const condition  = item.condition ?? 'NM'
+  const priceData  = item.cards.card_prices?.[0]
+  const usdPrice   = priceData?.usd_price ?? null
   const localPrice = countryCode === 'UAE' ? (priceData?.aed_price ?? null) : (priceData?.inr_price ?? null)
   const fetchedAt  = priceData?.last_fetched ?? null
+
+  const gainPct = (usdPrice != null && item.added_price_usd != null && item.added_price_usd > 0)
+    ? ((usdPrice - item.added_price_usd) / item.added_price_usd) * 100
+    : null
 
   const graded = item.grading_company && item.grading_company !== 'RAW' && item.grade != null
   const gradeDisplay = item.grade != null
@@ -163,9 +168,22 @@ function CardTile({
           <div className="h-3.5 w-3/4 rounded animate-pulse mt-1" style={{ background: '#e0dbd0' }} />
         ) : usdPrice != null ? (
           <>
-            <p className="font-black text-xs" style={{ color: '#E8233B' }}>
-              {formatPrice(localPrice ?? convertFromUSD(usdPrice, countryCode), countryCode)}
-            </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="font-black text-xs" style={{ color: '#E8233B' }}>
+                {formatPrice(localPrice ?? convertFromUSD(usdPrice, countryCode), countryCode)}
+              </p>
+              {gainPct != null && (
+                <span
+                  className="text-[9px] font-black px-1 py-0.5"
+                  style={{
+                    background: gainPct >= 0 ? '#dcfce7' : '#fee2e2',
+                    color:      gainPct >= 0 ? '#16a34a' : '#dc2626',
+                  }}
+                >
+                  {gainPct >= 0 ? '+' : ''}{gainPct.toFixed(1)}%
+                </span>
+              )}
+            </div>
             {fetchedAt && (
               <p className="text-[10px]" style={{ color: '#8B7866' }}>Updated {timeAgo(fetchedAt)}</p>
             )}
@@ -195,14 +213,16 @@ export default function BinderView({
   const [loading, setLoading] = useState(true)
   const [priceLoadingIds, setPriceLoadingIds] = useState<Set<string>>(new Set())
   const [scanOpen, setScanOpen] = useState(false)
-  const refreshed = useRef<Set<string>>(new Set())
+  const [sevenDayChange, setSevenDayChange] = useState<number | null>(null)
+  const refreshed     = useRef<Set<string>>(new Set())
+  const snapshotSaved = useRef(false)
 
   const fetchCollection = useCallback(async () => {
     const { data, error } = await supabase
       .from('user_cards')
       .select(`
         id, card_id, created_at, condition, is_foil,
-        grading_company, grade, grade_label,
+        grading_company, grade, grade_label, added_price_usd,
         cards (
           id, name, set_name, rarity, image_url, card_number,
           card_prices ( usd_price, inr_price, aed_price, last_fetched )
@@ -268,6 +288,50 @@ export default function BinderView({
       )
       if (i + BATCH < toRefresh.length) await new Promise(r => setTimeout(r, 1000))
     }
+
+    // After all prices are fresh, save today's snapshot and compute 7D change
+    if (!snapshotSaved.current) {
+      snapshotSaved.current = true
+
+      // Re-read items from state to get the latest prices
+      setItems(latest => {
+        const totalUsd = latest.reduce((sum, it) => {
+          const p = it.cards.card_prices?.[0]?.usd_price ?? 0
+          return sum + p
+        }, 0)
+
+        // Fire-and-forget: save today's snapshot, seed baseline if needed, compute 7D
+        ;(async () => {
+          await fetch('/api/snapshot-value', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value_usd: totalUsd }),
+          })
+
+          const res = await fetch('/api/snapshot-value')
+          if (!res.ok) return
+          const { snapshots } = await res.json() as { snapshots: { snapshot_date: string; value_usd: number }[] }
+
+          if (snapshots.length <= 1) {
+            // Seed a baseline 7 days ago so tracking begins immediately (shows 0% to start)
+            const baseDate = new Date()
+            baseDate.setDate(baseDate.getDate() - 7)
+            await fetch('/api/snapshot-value', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ value_usd: totalUsd, snapshot_date: baseDate.toISOString().slice(0, 10) }),
+            })
+            setSevenDayChange(0)
+          } else {
+            const oldest = snapshots[0].value_usd
+            const newest = snapshots[snapshots.length - 1].value_usd
+            if (oldest > 0) setSevenDayChange(((newest - oldest) / oldest) * 100)
+          }
+        })()
+
+        return latest
+      })
+    }
   }, [profileUserId])
 
   useEffect(() => { fetchCollection() }, [fetchCollection])
@@ -287,6 +351,23 @@ export default function BinderView({
     if (local != null) return sum + local
     return sum + convertFromUSD(p?.usd_price ?? 0, countryCode)
   }, 0)
+
+  // All-time gain: compare current USD value vs added_price_usd for cards that have both
+  const { currentUsd: gainCurrentUsd, addedUsd: gainAddedUsd } = items.reduce(
+    (acc, item) => {
+      const cur = item.cards.card_prices?.[0]?.usd_price ?? null
+      const add = item.added_price_usd ?? null
+      if (cur != null && add != null && add > 0) {
+        acc.currentUsd += cur
+        acc.addedUsd   += add
+      }
+      return acc
+    },
+    { currentUsd: 0, addedUsd: 0 }
+  )
+  const allTimeGainPct = gainAddedUsd > 0
+    ? ((gainCurrentUsd - gainAddedUsd) / gainAddedUsd) * 100
+    : null
 
   const pricesUpdating = priceLoadingIds.size > 0
 
@@ -341,24 +422,45 @@ export default function BinderView({
             className="rounded-xl mb-5 overflow-hidden"
             style={{ border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
           >
-            <div className="grid grid-cols-3" style={{ borderBottom: '2px solid #0A0A0A' }}>
+            <div className="grid grid-cols-4" style={{ borderBottom: '2px solid #0A0A0A' }}>
               {[
-                { label: 'CARDS', value: items.length.toString() },
-                { label: 'VALUE', value: countryReady ? formatPrice(totalLocal, countryCode) : '…' },
-                { label: '7D',    value: '+2.4%' },
+                {
+                  label: 'CARDS',
+                  value: items.length.toString(),
+                  color: '#0A0A0A',
+                },
+                {
+                  label: 'VALUE',
+                  value: countryReady ? formatPrice(totalLocal, countryCode) : '…',
+                  color: '#E8233B',
+                  updating: pricesUpdating,
+                },
+                {
+                  label: '7D',
+                  value: sevenDayChange != null
+                    ? `${sevenDayChange >= 0 ? '+' : ''}${sevenDayChange.toFixed(1)}%`
+                    : '—',
+                  color: sevenDayChange == null ? '#8B7866'
+                    : sevenDayChange >= 0 ? '#16a34a' : '#dc2626',
+                },
+                {
+                  label: 'GAIN',
+                  value: allTimeGainPct != null
+                    ? `${allTimeGainPct >= 0 ? '+' : ''}${allTimeGainPct.toFixed(1)}%`
+                    : '—',
+                  color: allTimeGainPct == null ? '#8B7866'
+                    : allTimeGainPct >= 0 ? '#16a34a' : '#dc2626',
+                },
               ].map((s, i, arr) => (
                 <div
                   key={s.label}
-                  className="py-3 px-3 flex flex-col"
+                  className="py-3 px-2 flex flex-col"
                   style={{ borderRight: i < arr.length - 1 ? '2px solid #0A0A0A' : 'none', background: '#FAF6EC' }}
                 >
                   <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#8B7866' }}>{s.label}</span>
-                  <span
-                    className="font-black text-base leading-tight mt-0.5"
-                    style={{ color: s.label === 'VALUE' ? '#E8233B' : s.label === '7D' ? '#16a34a' : '#0A0A0A' }}
-                  >
-                    {s.label === 'VALUE' && pricesUpdating ? (
-                      <span className="text-xs" style={{ color: '#8B7866' }}>Updating…</span>
+                  <span className="font-black text-sm leading-tight mt-0.5" style={{ color: s.color }}>
+                    {'updating' in s && s.updating ? (
+                      <span className="text-xs" style={{ color: '#8B7866' }}>…</span>
                     ) : s.value}
                   </span>
                 </div>

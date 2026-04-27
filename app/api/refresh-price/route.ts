@@ -239,5 +239,12 @@ export async function GET(request: NextRequest) {
     console.error('[refresh-price] card_prices upsert error:', upsertError)
   }
 
+  // Phase 3: write one row per day into card_price_daily (upsert — safe to call repeatedly)
+  const today = new Date().toISOString().slice(0, 10)
+  await supabase.from('card_price_daily').upsert(
+    { card_id: cardId, price_date: today, usd_price: usdPrice },
+    { onConflict: 'card_id,price_date' }
+  )
+
   return NextResponse.json({ card_id: cardId, usd_price: usdPrice, inr_price: inrPrice, aed_price: aedPrice, last_fetched: lastFetched })
 }
