@@ -13,6 +13,16 @@ export function convertFromUSD(usdAmount: number, countryCode: string): number {
   return Math.round(usdAmount * (USD_TO[countryCode] ?? 1));
 }
 
+export function convertINRToLocal(inrAmount: number, countryCode: string): number {
+  if (countryCode === 'IN') return inrAmount;
+
+  const localRate = USD_TO[countryCode];
+  const inrRate = USD_TO.IN;
+  if (!localRate || !inrRate) return inrAmount;
+
+  return Math.round((inrAmount / inrRate) * localRate);
+}
+
 export function formatPriceFromUSD(usdAmount: number, countryCode: string): string {
   return formatPrice(convertFromUSD(usdAmount, countryCode), countryCode);
 }

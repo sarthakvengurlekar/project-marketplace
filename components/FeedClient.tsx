@@ -36,6 +36,12 @@ export interface Seller {
   filter_cards: PreviewCard[]
 }
 
+export interface CurrentUserProfile {
+  id: string
+  username: string
+  avatar_url: string | null
+}
+
 type CountryFilter = 'IN' | 'UAE' | 'BOTH'
 
 function rarityKey(rarity: string | null | undefined): string {
@@ -217,9 +223,11 @@ function SellerCard({
 
 export default function FeedClient({
   sellers: initialSellers,
+  currentUser,
   defaultFilter,
 }: {
   sellers: Seller[]
+  currentUser: CurrentUserProfile | null
   defaultFilter: string
 }) {
   const router = useRouter()
@@ -274,6 +282,8 @@ export default function FeedClient({
     await supabase.auth.signOut()
     router.push('/login')
   }
+
+  const currentInitial = currentUser?.username?.[0]?.toUpperCase() ?? '?'
 
   const rarityOptionMap = new Map<string, string>()
   sellers.flatMap(s => s.rarities ?? []).forEach(rarity => {
@@ -339,15 +349,18 @@ export default function FeedClient({
               >
                 Sign out
               </button>
-              {/* Filter button */}
-              <button
-                onClick={() => setFiltersOpen(prev => !prev)}
-                className="w-9 h-9 flex items-center justify-center font-black text-sm"
-                style={{ background: filtersOpen || activeFilterCount > 0 ? '#F4D03F' : '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A' }}
-                aria-label="Filters"
+              <Link
+                href="/profile"
+                className="w-9 h-9 flex items-center justify-center font-black text-sm overflow-hidden"
+                style={{ background: '#F4D03F', color: '#0A0A0A', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', position: 'relative' }}
+                aria-label="Profile"
               >
-                ≡
-              </button>
+                {currentUser?.avatar_url ? (
+                  <Image src={currentUser.avatar_url} alt={currentUser.username} fill sizes="36px" className="object-cover" unoptimized />
+                ) : (
+                  currentInitial
+                )}
+              </Link>
             </div>
           </div>
 

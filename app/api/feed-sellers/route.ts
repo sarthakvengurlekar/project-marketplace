@@ -32,7 +32,7 @@ export async function GET() {
   // User's country for default filter
   const { data: myProfile } = await adminSupabase
     .from('profiles')
-    .select('country_code')
+    .select('id, username, avatar_url, country_code')
     .eq('id', currentUserId)
     .maybeSingle()
   const defaultFilter = myProfile?.country_code?.toUpperCase() ?? 'IN'
@@ -47,7 +47,7 @@ export async function GET() {
   const uniqueSellerIds = Array.from(new Set((userCards ?? []).map(r => r.user_id as string)))
 
   if (uniqueSellerIds.length === 0) {
-    return NextResponse.json({ sellers: [], currentUserId, defaultFilter })
+    return NextResponse.json({ sellers: [], currentUserId, currentUser: myProfile ?? null, defaultFilter })
   }
 
   // Already-swiped ids
@@ -60,7 +60,7 @@ export async function GET() {
   // Unswiped seller ids
   const unseenIds = uniqueSellerIds.filter(id => !swipedSet.has(id))
   if (unseenIds.length === 0) {
-    return NextResponse.json({ sellers: [], currentUserId, defaultFilter })
+    return NextResponse.json({ sellers: [], currentUserId, currentUser: myProfile ?? null, defaultFilter })
   }
 
   // Profiles + preview cards in two queries (no N+1 loop)
@@ -127,5 +127,5 @@ export async function GET() {
     }
   })
 
-  return NextResponse.json({ sellers, currentUserId, defaultFilter })
+  return NextResponse.json({ sellers, currentUserId, currentUser: myProfile ?? null, defaultFilter })
 }

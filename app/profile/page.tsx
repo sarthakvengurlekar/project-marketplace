@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useCountry } from '@/lib/context/CountryContext'
-import { formatPrice, COUNTRIES } from '@/lib/currency'
+import { convertINRToLocal, formatPrice, COUNTRIES } from '@/lib/currency'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +27,15 @@ interface Stats {
   collection_value_local: number
   trade_count: number
   avg_rating: number | null
+  badge_metrics: {
+    foil_count: number
+    graded_count: number
+    psa10_count: number
+    scanned_count: number
+    max_card_value_local: number
+    rare_card_count: number
+    sets_with_10_count: number
+  }
 }
 
 interface PreviewCard {
@@ -34,6 +43,32 @@ interface PreviewCard {
   condition: string | null
   is_foil: boolean
   cards: { id: string; name: string; image_url: string | null } | null
+}
+
+interface BadgeStage {
+  key: string
+  label: string
+  target: number
+  text: string
+  complete: boolean
+}
+
+interface BadgeProgress {
+  id: string
+  name: string
+  icon: string
+  level: string
+  current: number
+  nextTarget: number | null
+  progress: number
+  sub: string
+  stages: BadgeStage[]
+}
+
+interface BadgeUnlock {
+  badgeName: string
+  level: string
+  text: string
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -49,6 +84,191 @@ const COUNTRY_OPTIONS = [
   { code: 'IN',  flag: '🇮🇳', name: 'India' },
   { code: 'UAE', flag: '🇦🇪', name: 'UAE'   },
 ]
+
+// ─── Badge helpers ───────────────────────────────────────────────────────────
+
+function buildCountBadge(
+  id: string,
+  name: string,
+  icon: string,
+  current: number,
+  unit: string,
+  stages: Array<{ key: string; label: string; target: number; text: string }>,
+): BadgeProgress {
+  const completeCount = stages.filter(s => current >= s.target).length
+  const next = stages[completeCount] ?? null
+  return {
+    id,
+    name,
+    icon,
+    level: completeCount > 0 ? stages[completeCount - 1].label : 'Locked',
+    current,
+    nextTarget: next?.target ?? null,
+    progress: next ? Math.min(100, Math.round((current / next.target) * 100)) : 100,
+    sub: next ? `${current.toLocaleString('en-IN')} / ${next.target.toLocaleString('en-IN')} ${unit}` : `${current.toLocaleString('en-IN')} ${unit}`,
+    stages: stages.map(s => ({ ...s, complete: current >= s.target })),
+  }
+}
+
+function buildValueBadge(stats: Stats, countryCode: string): BadgeProgress {
+  const stageFromInr = (targetInr: number, plus = false) => {
+    const target = convertINRToLocal(targetInr, countryCode)
+    return {
+      target,
+      text: `${formatPrice(target, countryCode)}${plus ? '+' : ''} collection`,
+    }
+  }
+  const stages = [
+    { key: 'bronze', label: 'Bronze', ...stageFromInr(10_000) },
+    { key: 'silver', label: 'Silver', ...stageFromInr(50_000) },
+    { key: 'gold', label: 'Gold', ...stageFromInr(100_000) },
+    { key: 'platinum', label: 'Platinum', ...stageFromInr(500_000) },
+    { key: 'diamond', label: 'Diamond', ...stageFromInr(1_000_000, true) },
+  ]
+  const current = stats.collection_value_local
+  const completeCount = stages.filter(s => current >= s.target).length
+  const next = stages[completeCount] ?? null
+  return {
+    id: 'high_roller',
+    name: 'High Roller',
+    icon: countryCode === 'UAE' ? 'AED' : '₹',
+    level: completeCount > 0 ? stages[completeCount - 1].label : 'Locked',
+    current,
+    nextTarget: next?.target ?? null,
+    progress: next ? Math.min(100, Math.round((current / next.target) * 100)) : 100,
+    sub: next ? `${formatPrice(current, countryCode)} / ${formatPrice(next.target, countryCode)}` : formatPrice(current, countryCode),
+    stages: stages.map(s => ({ ...s, complete: current >= s.target })),
+  }
+}
+
+function buildSlabBadge(stats: Stats): BadgeProgress {
+  const graded = stats.badge_metrics.graded_count
+  const psa10 = stats.badge_metrics.psa10_count
+  const stages = [
+    { key: 'bronze', label: 'Bronze', target: 1, text: 'First graded card', complete: graded >= 1 },
+    { key: 'silver', label: 'Silver', target: 5, text: '5 graded cards', complete: graded >= 5 },
+    { key: 'gold', label: 'Gold', target: 10, text: '10 graded cards', complete: graded >= 10 },
+    { key: 'platinum', label: 'Platinum', target: 1, text: 'PSA 10 owner', complete: psa10 >= 1 },
+    { key: 'diamond', label: 'Diamond', target: 5, text: '5+ PSA 10s', complete: psa10 >= 5 },
+  ]
+  const completeCount = stages.filter(s => s.complete).length
+  const next = stages.find(s => !s.complete) ?? null
+  const current = next?.key === 'platinum' || next?.key === 'diamond' ? psa10 : graded
+  return {
+    id: 'slab_master',
+    name: 'Slab Master',
+    icon: 'SLAB',
+    level: completeCount > 0 ? stages.filter(s => s.complete).at(-1)!.label : 'Locked',
+    current,
+    nextTarget: next?.target ?? null,
+    progress: next ? Math.min(100, Math.round((current / next.target) * 100)) : 100,
+    sub: next ? `${current.toLocaleString('en-IN')} / ${next.target.toLocaleString('en-IN')} ${next.key.includes('diamond') || next.key.includes('platinum') ? 'PSA 10s' : 'graded'}` : `${graded} graded · ${psa10} PSA 10`,
+    stages,
+  }
+}
+
+function buildBadges(stats: Stats, countryCode: string): BadgeProgress[] {
+  return [
+    buildCountBadge('deal_maker', 'Deal Maker', 'DEAL', stats.trade_count, 'trades', [
+      { key: 'bronze', label: 'Bronze', target: 1, text: 'First trade' },
+      { key: 'silver', label: 'Silver', target: 10, text: '10 trades' },
+      { key: 'gold', label: 'Gold', target: 50, text: '50 trades' },
+      { key: 'platinum', label: 'Platinum', target: 100, text: '100 trades' },
+      { key: 'diamond', label: 'Diamond', target: 500, text: '500 trades' },
+    ]),
+    buildCountBadge('foil_hunter', 'Foil Hunter', 'FOIL', stats.badge_metrics.foil_count, 'foil cards', [
+      { key: 'bronze', label: 'Bronze', target: 5, text: '5 foil cards' },
+      { key: 'silver', label: 'Silver', target: 20, text: '20 foil cards' },
+      { key: 'gold', label: 'Gold', target: 50, text: '50 foil cards' },
+      { key: 'platinum', label: 'Platinum', target: 100, text: '100 foil cards' },
+      { key: 'diamond', label: 'Diamond', target: 200, text: '200 foil cards' },
+    ]),
+    buildValueBadge(stats, countryCode),
+    buildCountBadge('set_collector', 'Set Collector', 'SET', stats.badge_metrics.sets_with_10_count, 'sets with 10+ cards', [
+      { key: 'bronze', label: 'Level 1', target: 1, text: '1 set with 10+ cards' },
+      { key: 'silver', label: 'Level 2', target: 3, text: '3 sets with 10+ cards' },
+      { key: 'gold', label: 'Level 3', target: 5, text: '5 sets with 10+ cards' },
+      { key: 'platinum', label: 'Level 4', target: 10, text: '10 sets with 10+ cards' },
+    ]),
+    buildCountBadge('rare_taste', 'Rare Taste', 'RARE', stats.badge_metrics.rare_card_count, 'cards worth 10k+', [
+      { key: 'bronze', label: 'One Rare', target: 1, text: 'One card worth 10k+' },
+      { key: 'silver', label: 'Three Rares', target: 3, text: 'Three cards worth 10k+' },
+      { key: 'gold', label: 'Ten Rares', target: 10, text: 'Ten cards worth 10k+' },
+      { key: 'platinum', label: 'Twenty Rares', target: 20, text: 'Twenty cards worth 10k+' },
+    ]),
+    buildSlabBadge(stats),
+    buildCountBadge('sharp_eye', 'Sharp Eye', 'SCAN', stats.badge_metrics.scanned_count, 'scanned cards', [
+      { key: 'bronze', label: 'Bronze', target: 25, text: '25 scanned cards' },
+      { key: 'silver', label: 'Silver', target: 50, text: '50 scanned cards' },
+      { key: 'gold', label: 'Gold', target: 100, text: '100 scanned cards' },
+    ]),
+  ]
+}
+
+function BadgeCard({ badge }: { badge: BadgeProgress }) {
+  const unlocked = badge.stages.some(s => s.complete)
+  return (
+    <div style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: unlocked ? '4px 4px 0 #0A0A0A' : 'none', opacity: unlocked ? 1 : 0.72, padding: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ width: 44, height: 44, flexShrink: 0, background: unlocked ? '#F4D03F' : '#f0ece2', border: '2px solid #0A0A0A', boxShadow: unlocked ? '2px 2px 0 #0A0A0A' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0A0A0A', fontWeight: 900, fontSize: badge.icon.length > 2 ? 9 : 18 }}>
+          {badge.icon}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 14, margin: 0 }}>{badge.name}</p>
+            <span style={{ background: unlocked ? '#E8233B' : '#FAF6EC', color: unlocked ? '#FAF6EC' : '#8B7866', border: '1.5px solid #0A0A0A', fontSize: 9, fontWeight: 900, padding: '2px 6px', whiteSpace: 'nowrap' }}>
+              {badge.level}
+            </span>
+          </div>
+          <p style={{ color: '#8B7866', fontSize: 11, margin: '4px 0 8px' }}>{badge.sub}</p>
+          <div style={{ height: 8, background: '#f0ece2', border: '1.5px solid #0A0A0A', overflow: 'hidden' }}>
+            <div style={{ width: `${badge.progress}%`, height: '100%', background: unlocked ? '#E8233B' : '#8B7866' }} />
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 5, overflowX: 'auto', scrollbarWidth: 'none', marginTop: 10 } as React.CSSProperties}>
+        {badge.stages.map(stage => (
+          <span
+            key={stage.key}
+            title={stage.text}
+            style={{
+              flexShrink: 0,
+              background: stage.complete ? '#0A0A0A' : '#FAF6EC',
+              color: stage.complete ? '#FAF6EC' : '#8B7866',
+              border: '1.5px solid #0A0A0A',
+              fontWeight: 900,
+              fontSize: 8,
+              padding: '2px 6px',
+              textTransform: 'uppercase',
+            }}
+          >
+            {stage.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function BadgeUnlockModal({ unlock, onClose }: { unlock: BadgeUnlock; onClose: () => void }) {
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(10,10,10,0.65)', zIndex: 60 }} />
+      <div style={{ position: 'fixed', left: 16, right: 16, top: '50%', transform: 'translateY(-50%)', zIndex: 61, maxWidth: 420, margin: '0 auto', background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '6px 6px 0 #0A0A0A', padding: 22, textAlign: 'center' }}>
+        <div style={{ width: 64, height: 64, margin: '0 auto 14px', background: '#F4D03F', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 24 }}>
+          ✓
+        </div>
+        <p style={{ color: '#8B7866', fontSize: 10, fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 6px' }}>Badge unlocked</p>
+        <h2 style={{ color: '#0A0A0A', fontSize: 20, fontWeight: 900, margin: '0 0 6px' }}>{unlock.badgeName}</h2>
+        <p style={{ color: '#E8233B', fontSize: 14, fontWeight: 900, margin: '0 0 6px' }}>{unlock.level}</p>
+        <p style={{ color: '#8B7866', fontSize: 13, margin: '0 0 18px' }}>{unlock.text}</p>
+        <button onClick={onClose} style={{ width: '100%', background: '#E8233B', color: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', padding: '12px 0', fontWeight: 900, cursor: 'pointer' }}>
+          Nice
+        </button>
+      </div>
+    </>
+  )
+}
 
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
 
@@ -269,20 +489,40 @@ export default function ProfilePage() {
   const [previewCards, setPreviewCards] = useState<PreviewCard[]>([])
   const [loading,      setLoading]      = useState(true)
   const [editOpen,     setEditOpen]     = useState(false)
+  const [badgeUnlock,  setBadgeUnlock]  = useState<BadgeUnlock | null>(null)
+
+  const loadProfile = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true)
+    const res = await fetch('/api/profile', { cache: 'no-store' })
+    if (res.status === 401) { router.replace('/login'); return }
+    if (!res.ok) { setLoading(false); return }
+    const data = await res.json()
+    setProfile(data.profile)
+    setStats(data.stats)
+    setPreviewCards(data.preview_cards ?? [])
+    setLoading(false)
+  }, [router])
 
   useEffect(() => {
-    async function load() {
-      const res = await fetch('/api/profile')
-      if (res.status === 401) { router.replace('/login'); return }
-      if (!res.ok) { setLoading(false); return }
-      const data = await res.json()
-      setProfile(data.profile)
-      setStats(data.stats)
-      setPreviewCards(data.preview_cards ?? [])
-      setLoading(false)
+    loadProfile(true)
+  }, [loadProfile])
+
+  useEffect(() => {
+    function handleFocus() {
+      loadProfile()
     }
-    load()
-  }, [router])
+
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') loadProfile()
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [loadProfile])
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -293,6 +533,51 @@ export default function ProfilePage() {
   function handleSaved(updated: Partial<Profile>) {
     setProfile(prev => prev ? { ...prev, ...updated } : prev)
     if (updated.country_code) setCountryCode(updated.country_code)
+  }
+
+  const badgeProgress = useMemo(() => {
+    if (!stats || !profile) return []
+    return buildBadges(stats, profile.country_code)
+  }, [profile, stats])
+
+  const achievedBadgeKeys = useMemo(() => (
+    badgeProgress.flatMap(badge =>
+      badge.stages
+        .filter(stage => stage.complete)
+        .map(stage => `${badge.id}:${stage.key}`)
+    )
+  ), [badgeProgress])
+
+  useEffect(() => {
+    if (!profile || badgeProgress.length === 0) return
+
+    const storageKey = `pt_seen_badges_${profile.id}`
+    const existing = window.localStorage.getItem(storageKey)
+
+    if (!existing) {
+      window.localStorage.setItem(storageKey, JSON.stringify(achievedBadgeKeys))
+      return
+    }
+
+    let seen: string[] = []
+    try { seen = JSON.parse(existing) as string[] } catch { seen = [] }
+
+    const nextKey = achievedBadgeKeys.find(key => !seen.includes(key))
+    if (!nextKey || badgeUnlock) return
+
+    const [badgeId, stageKey] = nextKey.split(':')
+    const badge = badgeProgress.find(b => b.id === badgeId)
+    const stage = badge?.stages.find(s => s.key === stageKey)
+    if (!badge || !stage) return
+
+    setBadgeUnlock({ badgeName: badge.name, level: stage.label, text: stage.text })
+  }, [achievedBadgeKeys, badgeProgress, badgeUnlock, profile])
+
+  function closeBadgeUnlock() {
+    if (profile) {
+      window.localStorage.setItem(`pt_seen_badges_${profile.id}`, JSON.stringify(achievedBadgeKeys))
+    }
+    setBadgeUnlock(null)
   }
 
   if (loading) {
@@ -312,11 +597,6 @@ export default function ProfilePage() {
   const collectionVal = formatPrice(stats.collection_value_local, countryCode)
   const ratingDisplay = stats.avg_rating != null ? stats.avg_rating.toFixed(1) : '—'
   const initials      = profile.username[0]?.toUpperCase() ?? '?'
-
-  // Approximate badge unlock states
-  const earlyAdopter = true
-  const foilCards    = previewCards.filter(c => c.is_foil).length
-  const foilHunter   = foilCards >= 1
 
   return (
     <div className="min-h-screen pb-28" style={{ background: '#FAF6EC' }}>
@@ -422,47 +702,17 @@ export default function ProfilePage() {
 
       {/* ── Badges ───────────────────────────────────────────────────────── */}
       <div style={{ padding: '0 16px 16px' }}>
-        <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>
-          BADGES
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-          {[
-            {
-              icon: '⚙',
-              name: 'Early adopter',
-              sub: 'Apr 2026',
-              unlocked: earlyAdopter,
-              bg: '#F4D03F',
-            },
-            {
-              icon: '★',
-              name: 'Foil hunter',
-              sub: `${foilCards} of 7 foil`,
-              unlocked: foilHunter,
-              bg: '#FAF6EC',
-            },
-            {
-              icon: '○',
-              name: 'First trade',
-              sub: 'Locked',
-              unlocked: stats.trade_count > 0,
-              bg: '#FAF6EC',
-            },
-          ].map(badge => (
-            <div
-              key={badge.name}
-              style={{
-                background:  badge.unlocked ? badge.bg : '#FAF6EC',
-                border:      '2px solid #0A0A0A',
-                boxShadow:   badge.unlocked ? '2px 2px 0 #0A0A0A' : 'none',
-                padding:     '10px 10px 8px',
-                opacity:     badge.unlocked ? 1 : 0.5,
-              }}
-            >
-              <span style={{ fontSize: 16, display: 'block', marginBottom: 6, color: '#0A0A0A' }}>{badge.icon}</span>
-              <p style={{ color: '#0A0A0A', fontWeight: 800, fontSize: 12, margin: 0, lineHeight: 1.3 }}>{badge.name}</p>
-              <p style={{ color: '#8B7866', fontSize: 10, margin: '3px 0 0' }}>{badge.sub}</p>
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 }}>
+            BADGES
+          </p>
+          <span style={{ color: '#8B7866', fontSize: 10, fontWeight: 800 }}>
+            {achievedBadgeKeys.length} stages unlocked
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+          {badgeProgress.map(badge => (
+            <BadgeCard key={badge.id} badge={badge} />
           ))}
         </div>
       </div>
@@ -554,6 +804,10 @@ export default function ProfilePage() {
           onClose={() => setEditOpen(false)}
           onSaved={handleSaved}
         />
+      )}
+
+      {badgeUnlock && (
+        <BadgeUnlockModal unlock={badgeUnlock} onClose={closeBadgeUnlock} />
       )}
     </div>
   )
