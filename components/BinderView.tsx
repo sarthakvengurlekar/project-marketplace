@@ -422,7 +422,7 @@ export default function BinderView({
             className="rounded-xl mb-5 overflow-hidden"
             style={{ border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
           >
-            <div className="grid grid-cols-4" style={{ borderBottom: '2px solid #0A0A0A' }}>
+            <div className={`grid grid-cols-${isOwner ? 4 : 2}`} style={{ borderBottom: '2px solid #0A0A0A' }}>
               {[
                 {
                   label: 'CARDS',
@@ -435,22 +435,24 @@ export default function BinderView({
                   color: '#E8233B',
                   updating: pricesUpdating,
                 },
-                {
-                  label: '7D',
-                  value: sevenDayChange != null
-                    ? `${sevenDayChange >= 0 ? '+' : ''}${sevenDayChange.toFixed(1)}%`
-                    : '—',
-                  color: sevenDayChange == null ? '#8B7866'
-                    : sevenDayChange >= 0 ? '#16a34a' : '#dc2626',
-                },
-                {
-                  label: 'GAIN',
-                  value: allTimeGainPct != null
-                    ? `${allTimeGainPct >= 0 ? '+' : ''}${allTimeGainPct.toFixed(1)}%`
-                    : '—',
-                  color: allTimeGainPct == null ? '#8B7866'
-                    : allTimeGainPct >= 0 ? '#16a34a' : '#dc2626',
-                },
+                ...(isOwner ? [
+                  {
+                    label: '7D',
+                    value: sevenDayChange != null
+                      ? `${sevenDayChange >= 0 ? '+' : ''}${sevenDayChange.toFixed(1)}%`
+                      : '—',
+                    color: sevenDayChange == null ? '#8B7866'
+                      : sevenDayChange >= 0 ? '#16a34a' : '#dc2626',
+                  },
+                  {
+                    label: 'GAIN',
+                    value: allTimeGainPct != null
+                      ? `${allTimeGainPct >= 0 ? '+' : ''}${allTimeGainPct.toFixed(1)}%`
+                      : '—',
+                    color: allTimeGainPct == null ? '#8B7866'
+                      : allTimeGainPct >= 0 ? '#16a34a' : '#dc2626',
+                  },
+                ] : []),
               ].map((s, i, arr) => (
                 <div
                   key={s.label}

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { useCountry } from '@/lib/context/CountryContext'
+import { formatPriceFromUSD } from '@/lib/currency'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,10 +41,12 @@ function SellerCard({
   seller,
   onSwipe,
   disabled,
+  countryCode,
 }: {
   seller: Seller
   onSwipe: (id: string, username: string, dir: 'LIKE' | 'PASS') => void
   disabled: boolean
+  countryCode: string
 }) {
   const initials = seller.username[0]?.toUpperCase() ?? '?'
   const flag = seller.country_code === 'UAE' ? '🇦🇪' : seller.country_code === 'IN' ? '🇮🇳' : ''
@@ -137,7 +141,7 @@ function SellerCard({
             )}
             {item.usd_price != null && (
               <p className="text-[9px] font-black text-center" style={{ color: '#E8233B' }}>
-                ${item.usd_price.toFixed(2)}
+                {formatPriceFromUSD(item.usd_price, countryCode)}
               </p>
             )}
           </div>
@@ -205,6 +209,7 @@ export default function FeedClient({
   defaultFilter: string
 }) {
   const router = useRouter()
+  const { countryCode } = useCountry()
 
   const [sellers, setSellers]               = useState<Seller[]>(initialSellers)
   const [countryFilter, setCountryFilter]   = useState<CountryFilter>(defaultFilter as CountryFilter)
@@ -388,6 +393,7 @@ export default function FeedClient({
               seller={seller}
               onSwipe={handleSwipe}
               disabled={swipingId !== null}
+              countryCode={countryCode}
             />
           ))
         )}

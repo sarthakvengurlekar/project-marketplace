@@ -77,25 +77,25 @@ function retreatStars(cost: string | null): string {
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
 
-interface ChartPoint { label: string; inr: number; usd: number; volume: number }
+interface ChartPoint { label: string; local: number; usd: number; volume: number }
 
-function buildChartData(history: HistoryPoint[], USD_INR: number): ChartPoint[] {
+function buildChartData(history: HistoryPoint[], rate: number): ChartPoint[] {
   return history.map(h => ({
     label:  new Date(h.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
-    inr:    Math.round(h.price * USD_INR),
+    local:  Math.round(h.price * rate),
     usd:    h.price,
     volume: h.volume,
   }))
 }
 
-function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number }[]; label?: string }) {
+function CustomTooltip({ active, payload, label, fmt }: { active?: boolean; payload?: { name: string; value: number }[]; label?: string; fmt: (n: number) => string }) {
   if (!active || !payload?.length) return null
-  const inrEntry = payload.find(p => p.name === 'inr')
-  const volEntry = payload.find(p => p.name === 'volume')
+  const localEntry = payload.find(p => p.name === 'local')
+  const volEntry   = payload.find(p => p.name === 'volume')
   return (
     <div style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', padding: '8px 12px', borderRadius: 4 }}>
       <p style={{ color: '#8B7866', fontSize: 10, marginBottom: 4 }}>{label}</p>
-      {inrEntry && <p style={{ color: '#E8233B', fontWeight: 900, fontSize: 13 }}>{fmtINR(inrEntry.value)}</p>}
+      {localEntry && <p style={{ color: '#E8233B', fontWeight: 900, fontSize: 13 }}>{fmt(localEntry.value)}</p>}
       {volEntry && volEntry.value > 0 && <p style={{ color: '#8B7866', fontSize: 10 }}>{volEntry.value} sold</p>}
     </div>
   )
@@ -187,9 +187,11 @@ export default function CardDetailPage() {
   useEffect(() => { loadCard(); loadDetail() }, [loadCard, loadDetail])
 
   const rates        = detail?.rates ?? { USD_INR: 83.5, USD_AED: 3.67 }
+  const localRate    = countryCode === 'UAE' ? rates.USD_AED : rates.USD_INR
   const displayPrice = countryCode === 'UAE' ? price.aed : price.inr
   const displayFmt   = countryCode === 'UAE' ? fmtAED : fmtINR
-  const chartData    = detail ? buildChartData(detail.history, rates.USD_INR) : []
+  const currencyLabel = countryCode === 'UAE' ? 'AED' : 'INR'
+  const chartData    = detail ? buildChartData(detail.history, localRate) : []
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -325,7 +327,7 @@ export default function CardDetailPage() {
               ) : detail?.grades.find(g => g.grade === 'psa10') ? (
                 <>
                   <p className="font-black text-xl mt-1" style={{ color: '#FAF6EC' }}>
-                    {fmtINR(detail.grades.find(g => g.grade === 'psa10')!.smartPrice * rates.USD_INR)}
+                    {displayFmt(detail.grades.find(g => g.grade === 'psa10')!.smartPrice * localRate)}
                   </p>
                   <p className="text-[9px] mt-1" style={{ color: '#8B7866' }}>
                     {detail.grades.find(g => g.grade === 'psa10')!.count} sale{detail.grades.find(g => g.grade === 'psa10')!.count !== 1 ? 's' : ''} · 7d
@@ -388,11 +390,11 @@ export default function CardDetailPage() {
                     <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#d4cfc5" vertical={false} />
                       <XAxis dataKey="label" tick={{ fill: '#8B7866', fontSize: 9 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                      <YAxis yAxisId="price" tick={{ fill: '#8B7866', fontSize: 9 }} tickLine={false} axisLine={false} width={52} tickFormatter={v => `₹${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`} />
+                      <YAxis yAxisId="price" tick={{ fill: '#8B7866', fontSize: 9 }} tickLine={false} axisLine={false} width={52} tickFormatter={v => countryCode === 'UAE' ? (v >= 1000 ? `AED${(v/1000).toFixed(1)}k` : `AED${v}`) : (v >= 1000 ? `₹${(v/1000).toFixed(1)}k` : `₹${v}`)} />
                       <YAxis yAxisId="vol" orientation="right" tick={{ fill: '#c4bfb5', fontSize: 8 }} tickLine={false} axisLine={false} width={18} />
-                      <Tooltip content={<CustomTooltip />} />
+                      <Tooltip content={<CustomTooltip fmt={displayFmt} />} />
                       <Bar yAxisId="vol" dataKey="volume" name="volume" fill="#e0dbd0" radius={[2, 2, 0, 0]} barSize={8} />
-                      <Line yAxisId="price" type="monotone" dataKey="inr" name="inr" stroke="#E8233B" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#E8233B', stroke: '#FAF6EC', strokeWidth: 2 }} />
+                      <Line yAxisId="price" type="monotone" dataKey="local" name="local" stroke="#E8233B" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#E8233B', stroke: '#FAF6EC', strokeWidth: 2 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 ) : (
@@ -425,7 +427,7 @@ export default function CardDetailPage() {
                         <span className="text-sm font-bold" style={{ color: '#0A0A0A' }}>{c.condition}</span>
                       </div>
                       <span className="font-black text-sm" style={{ color: '#E8233B' }}>
-                        {fmtINR(c.usd * rates.USD_INR)}
+                        {displayFmt(c.usd * localRate)}
                       </span>
                     </div>
                   ))
@@ -458,7 +460,7 @@ export default function CardDetailPage() {
                     >
                       <span>Grade</span>
                       <span className="text-right">USD</span>
-                      <span className="text-right">INR</span>
+                      <span className="text-right">{currencyLabel}</span>
                       <span className="text-right">Sales</span>
                     </div>
                     {detail.grades.map((g, i, arr) => (
@@ -473,7 +475,7 @@ export default function CardDetailPage() {
                         <span className="font-black text-xs" style={{ color: g.grade === 'psa10' ? '#E8233B' : '#0A0A0A' }}>{g.label}</span>
                         <span className="text-right text-xs font-bold" style={{ color: '#8B7866' }}>{fmtUSD(g.smartPrice)}</span>
                         <span className="text-right text-xs font-black" style={{ color: g.grade === 'psa10' ? '#E8233B' : '#0A0A0A' }}>
-                          {fmtINR(Math.round(g.smartPrice * rates.USD_INR))}
+                          {displayFmt(Math.round(g.smartPrice * localRate))}
                         </span>
                         <span className="text-right text-xs" style={{ color: '#8B7866' }}>{g.count}</span>
                       </div>
