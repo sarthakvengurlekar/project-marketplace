@@ -172,7 +172,7 @@ function CardTile({
               <p className="font-black text-xs" style={{ color: '#E8233B' }}>
                 {formatPrice(localPrice ?? convertFromUSD(usdPrice, countryCode), countryCode)}
               </p>
-              {gainPct != null && (
+              {isOwner && gainPct != null && (
                 <span
                   className="text-[9px] font-black px-1 py-0.5"
                   style={{
@@ -405,15 +405,6 @@ export default function BinderView({
               </p>
             </div>
           </div>
-          {!isOwner && (
-            <button
-              onClick={() => router.back()}
-              className="font-black text-xs px-4 py-2"
-              style={{ background: '#FAF6EC', color: '#0A0A0A', border: '2px solid #0A0A0A' }}
-            >
-              ← BACK
-            </button>
-          )}
         </div>
 
         {/* Stats / value banner */}

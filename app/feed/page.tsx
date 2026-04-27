@@ -6,7 +6,6 @@ import FeedClient, { type Seller } from '@/components/FeedClient'
 
 export default function FeedPage() {
   const [sellers, setSellers]           = useState<Seller[] | null>(null)
-  const [currentUserId, setCurrentUserId] = useState('')
   const [defaultFilter, setDefaultFilter] = useState('IN')
   const router = useRouter()
 
@@ -16,7 +15,6 @@ export default function FeedPage() {
         if (r.status === 401) { router.push('/login'); return }
         const data = await r.json()
         setSellers(data.sellers)
-        setCurrentUserId(data.currentUserId)
         setDefaultFilter(data.defaultFilter)
       })
       .catch(err => console.error('[feed] fetch error:', err))
@@ -34,7 +32,6 @@ export default function FeedPage() {
   return (
     <FeedClient
       sellers={sellers}
-      currentUserId={currentUserId}
       defaultFilter={defaultFilter}
     />
   )

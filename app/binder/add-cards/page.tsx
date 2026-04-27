@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useCountry } from '@/lib/context/CountryContext'
 import { formatPriceFromUSD } from '@/lib/currency'
 import GradingSelector, { GradingSelection, DEFAULT_GRADING } from '@/components/GradingSelector'
+import ScanCardModal from '@/components/ScanCardModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -403,7 +404,6 @@ export default function AddCardsPage() {
   const [rates,         setRates]         = useState<ExchangeRates>(FALLBACK_RATES)
   const [query,         setQuery]         = useState('')
   const [activeSet,     setActiveSet]     = useState<string | null>(null)
-  const [inputFocused,  setInputFocused]  = useState(false)
   const [recentSets,    setRecentSets]    = useState<RecentSet[]>([])
   const [allCards,      setAllCards]      = useState<PptCard[]>([])
   const [loading,       setLoading]       = useState(true)
@@ -414,6 +414,7 @@ export default function AddCardsPage() {
   const [addedTotalUsd, setAddedTotalUsd] = useState(0)
   const [gradingCard,   setGradingCard]   = useState<PptCard | null>(null)
   const [gradingAdding, setGradingAdding] = useState(false)
+  const [scanOpen,      setScanOpen]      = useState(false)
 
   const abortRef    = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -620,6 +621,15 @@ export default function AddCardsPage() {
     }
   }
 
+  const handleScanCardAdded = useCallback(() => {
+    offsetRef.current = 0
+    if (isSearch) {
+      fetchSearch(query, activeSet, 0)
+    } else {
+      fetchBrowse(0)
+    }
+  }, [activeSet, fetchBrowse, fetchSearch, isSearch, query])
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <main style={{ minHeight: '100vh', background: '#FAF6EC', paddingBottom: addedCount > 0 ? 96 : 48 }}>
@@ -664,16 +674,19 @@ export default function AddCardsPage() {
             )}
           </div>
           <button
+            onClick={() => setScanOpen(true)}
+            disabled={!userId}
             style={{
               background:     '#FAF6EC',
               border:         '2px solid #0A0A0A',
-              boxShadow:      '2px 2px 0 #0A0A0A',
+              boxShadow:      userId ? '2px 2px 0 #0A0A0A' : 'none',
               color:          '#0A0A0A',
               fontWeight:     900,
               fontSize:       12,
               letterSpacing:  '0.08em',
               padding:        '6px 14px',
-              cursor:         'pointer',
+              cursor:         userId ? 'pointer' : 'not-allowed',
+              opacity:         userId ? 1 : 0.45,
             }}
           >
             SCAN
@@ -693,8 +706,6 @@ export default function AddCardsPage() {
               type="text"
               value={query}
               onChange={e => { setQuery(e.target.value); if (e.target.value.trim()) setActiveSet(null) }}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => setTimeout(() => setInputFocused(false), 150)}
               placeholder={activeSet ? `Searching in ${activeSet}…` : 'Search by name, set or number…'}
               style={{
                 width:           '100%',
@@ -893,6 +904,16 @@ export default function AddCardsPage() {
         onClose={() => { if (!gradingAdding) setGradingCard(null) }}
         onConfirm={handleConfirmGrading}
       />
+
+      {/* ── Scan Card modal ─────────────────────────────────────────────────── */}
+      {userId && (
+        <ScanCardModal
+          userId={userId}
+          isOpen={scanOpen}
+          onClose={() => setScanOpen(false)}
+          onCardAdded={handleScanCardAdded}
+        />
+      )}
 
       {/* ── Toast ──────────────────────────────────────────────────────────── */}
       <Toast

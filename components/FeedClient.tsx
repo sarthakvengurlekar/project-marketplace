@@ -19,6 +19,7 @@ export interface PreviewCard {
     id: string
     name: string
     image_url: string
+    rarity: string | null
   }
 }
 
@@ -30,10 +31,16 @@ export interface Seller {
   country_code: string
   trade_rating: number | null
   card_count: number
+  rarities: string[]
   preview_cards: PreviewCard[]
+  filter_cards: PreviewCard[]
 }
 
 type CountryFilter = 'IN' | 'UAE' | 'BOTH'
+
+function rarityKey(rarity: string | null | undefined): string {
+  return (rarity ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
 
 // ─── Seller card ──────────────────────────────────────────────────────────────
 
@@ -42,15 +49,24 @@ function SellerCard({
   onSwipe,
   disabled,
   countryCode,
+  activeRarityKeys,
 }: {
   seller: Seller
   onSwipe: (id: string, username: string, dir: 'LIKE' | 'PASS') => void
   disabled: boolean
   countryCode: string
+  activeRarityKeys: string[]
 }) {
   const initials = seller.username[0]?.toUpperCase() ?? '?'
   const flag = seller.country_code === 'UAE' ? '🇦🇪' : seller.country_code === 'IN' ? '🇮🇳' : ''
   const rating = seller.trade_rating
+  const hasRarityFilters = activeRarityKeys.length > 0
+  const displayedCards = hasRarityFilters
+    ? seller.filter_cards.filter(item => activeRarityKeys.includes(rarityKey(item.cards?.rarity))).slice(0, 8)
+    : seller.preview_cards
+  const hiddenCardCount = hasRarityFilters
+    ? seller.filter_cards.filter(item => activeRarityKeys.includes(rarityKey(item.cards?.rarity))).length - displayedCards.length
+    : seller.card_count - seller.preview_cards.length
 
   return (
     <div
@@ -110,7 +126,7 @@ function SellerCard({
         className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-none"
         style={{ borderBottom: '2px solid #0A0A0A', scrollSnapType: 'x mandatory' } as React.CSSProperties}
       >
-        {seller.preview_cards.map(item => (
+        {displayedCards.map(item => (
           <div
             key={item.id}
             className="flex-shrink-0 w-[72px]"
@@ -148,12 +164,12 @@ function SellerCard({
         ))}
 
         {/* "+N more" placeholder */}
-        {seller.card_count > seller.preview_cards.length && (
+        {hiddenCardCount > 0 && (
           <div
             className="flex-shrink-0 w-[72px] h-[100px] flex flex-col items-center justify-center gap-1"
             style={{ border: '2px dashed #0A0A0A', background: '#f0ece2' }}
           >
-            <span className="font-black text-sm" style={{ color: '#0A0A0A' }}>+{seller.card_count - seller.preview_cards.length}</span>
+            <span className="font-black text-sm" style={{ color: '#0A0A0A' }}>+{hiddenCardCount}</span>
             <span className="text-[8px] uppercase tracking-wider" style={{ color: '#8B7866' }}>VIEW</span>
           </div>
         )}
@@ -201,11 +217,9 @@ function SellerCard({
 
 export default function FeedClient({
   sellers: initialSellers,
-  currentUserId,
   defaultFilter,
 }: {
   sellers: Seller[]
-  currentUserId: string
   defaultFilter: string
 }) {
   const router = useRouter()
@@ -214,6 +228,8 @@ export default function FeedClient({
   const [sellers, setSellers]               = useState<Seller[]>(initialSellers)
   const [countryFilter, setCountryFilter]   = useState<CountryFilter>(defaultFilter as CountryFilter)
   const [searchQuery, setSearchQuery]       = useState('')
+  const [filtersOpen, setFiltersOpen]       = useState(false)
+  const [rarityFilters, setRarityFilters]   = useState<string[]>([])
   const [swipingId, setSwipingId]           = useState<string | null>(null)
   const [toast, setToast]                   = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -259,14 +275,37 @@ export default function FeedClient({
     router.push('/login')
   }
 
+  const rarityOptionMap = new Map<string, string>()
+  sellers.flatMap(s => s.rarities ?? []).forEach(rarity => {
+    const key = rarityKey(rarity)
+    if (key && !rarityOptionMap.has(key)) rarityOptionMap.set(key, rarity.trim())
+  })
+  const rarityOptions = Array.from(rarityOptionMap.entries())
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+  const activeFilterCount = rarityFilters.length
+
+  function toggleRarity(rarity: string) {
+    setRarityFilters(prev =>
+      prev.includes(rarity)
+        ? prev.filter(r => r !== rarity)
+        : [...prev, rarity]
+    )
+  }
+
   const visibleSellers = (() => {
     const afterCountry = countryFilter === 'BOTH'
       ? sellers
       : sellers.filter(s => s.country_code?.toUpperCase() === countryFilter)
     const q = searchQuery.trim().toLowerCase()
-    return q
+    const afterSearch = q
       ? afterCountry.filter(s => s.preview_cards.some(c => c.cards?.name?.toLowerCase().includes(q)))
       : afterCountry
+    return afterSearch.filter(s => {
+      const sellerRarityKeys = (s.rarities ?? []).map(rarityKey)
+      const rarityOk = rarityFilters.length === 0 || rarityFilters.some(r => sellerRarityKeys.includes(r))
+      return rarityOk
+    })
   })()
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -301,12 +340,14 @@ export default function FeedClient({
                 Sign out
               </button>
               {/* Filter button */}
-              <div
+              <button
+                onClick={() => setFiltersOpen(prev => !prev)}
                 className="w-9 h-9 flex items-center justify-center font-black text-sm"
-                style={{ background: '#F4D03F', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A' }}
+                style={{ background: filtersOpen || activeFilterCount > 0 ? '#F4D03F' : '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A' }}
+                aria-label="Filters"
               >
                 ≡
-              </div>
+              </button>
             </div>
           </div>
 
@@ -342,12 +383,13 @@ export default function FeedClient({
               className="w-full pl-9 pr-16 py-2.5 text-sm focus:outline-none bg-transparent"
               style={{ color: '#0A0A0A' }}
             />
-            <div
+            <button
+              onClick={() => setFiltersOpen(prev => !prev)}
               className="absolute right-0 top-0 bottom-0 flex items-center justify-center px-3 text-[10px] font-black uppercase"
-              style={{ background: '#E8233B', color: '#FAF6EC', borderLeft: '2px solid #0A0A0A' }}
+              style={{ background: activeFilterCount > 0 ? '#F4D03F' : '#E8233B', color: activeFilterCount > 0 ? '#0A0A0A' : '#FAF6EC', border: 'none', borderLeft: '2px solid #0A0A0A', cursor: 'pointer' }}
             >
-              FILTERS
-            </div>
+              {activeFilterCount > 0 ? `FILTERED ${activeFilterCount}` : 'FILTERS'}
+            </button>
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
@@ -358,6 +400,51 @@ export default function FeedClient({
               </button>
             )}
           </div>
+
+          {filtersOpen && (
+            <div style={{ border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', background: '#FAF6EC', padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 11, letterSpacing: '0.08em' }}>CARD FILTERS</span>
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={() => setRarityFilters([])}
+                    style={{ background: 'none', border: 'none', color: '#E8233B', fontWeight: 900, fontSize: 11, cursor: 'pointer' }}
+                  >
+                    CLEAR
+                  </button>
+                )}
+              </div>
+
+              <div style={{ marginBottom: 10 }}>
+                <p style={{ color: '#8B7866', fontSize: 9, fontWeight: 900, letterSpacing: '0.08em', margin: '0 0 6px' }}>RARITY</p>
+                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none' } as React.CSSProperties}>
+                  {[{ key: 'ALL', label: 'All' }, ...rarityOptions].map(r => {
+                    const selected = r.key === 'ALL' ? activeFilterCount === 0 : rarityFilters.includes(r.key)
+                    return (
+                      <button
+                        key={r.key}
+                        onClick={() => r.key === 'ALL' ? setRarityFilters([]) : toggleRarity(r.key)}
+                        style={{
+                          flexShrink: 0,
+                          background: selected ? '#F4D03F' : '#FAF6EC',
+                          border: '2px solid #0A0A0A',
+                          boxShadow: selected ? '2px 2px 0 #0A0A0A' : 'none',
+                          color: '#0A0A0A',
+                          fontWeight: selected ? 900 : 700,
+                          fontSize: 11,
+                          padding: '5px 10px',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {r.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       </div>
@@ -391,10 +478,11 @@ export default function FeedClient({
             <SellerCard
               key={seller.id}
               seller={seller}
-              onSwipe={handleSwipe}
-              disabled={swipingId !== null}
-              countryCode={countryCode}
-            />
+                onSwipe={handleSwipe}
+                disabled={swipingId !== null}
+                countryCode={countryCode}
+                activeRarityKeys={rarityFilters}
+              />
           ))
         )}
       </div>

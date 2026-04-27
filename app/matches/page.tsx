@@ -29,6 +29,14 @@ interface MatchRow {
   lastMessage: { content: string; created_at: string; isUnread: boolean } | null
 }
 
+interface PlayerResult extends OtherUser {
+  card_count: number
+  preview_cards: Array<{
+    id: string
+    cards: { id: string; name: string | null; image_url: string | null } | null
+  }>
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const FLAGS: Record<string, string> = { IN: '🇮🇳', UAE: '🇦🇪' }
@@ -242,6 +250,62 @@ function MatchItem({
   )
 }
 
+// ─── Player search ───────────────────────────────────────────────────────────
+
+function PlayerResultItem({
+  player,
+  acting,
+  onStartTrade,
+}: {
+  player: PlayerResult
+  acting: boolean
+  onStartTrade: (player: PlayerResult) => void
+}) {
+  return (
+    <div style={{ border: '2px solid #0A0A0A', background: '#FAF6EC', boxShadow: '3px 3px 0 #0A0A0A', padding: 12 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <Avatar user={player} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 14, margin: 0 }}>@{player.username}</p>
+            <span style={{ fontSize: 13 }}>{FLAGS[player.country_code] ?? ''}</span>
+          </div>
+          <p style={{ color: '#8B7866', fontSize: 11, margin: '3px 0 8px' }}>
+            {[player.city, `${player.card_count} cards`].filter(Boolean).join(' · ')}
+          </p>
+          {player.preview_cards.length > 0 && (
+            <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
+              {player.preview_cards.map(card => (
+                <div key={card.id} style={{ position: 'relative', width: 32, height: 45, border: '1.5px solid #0A0A0A', background: '#f0ece2', overflow: 'hidden', flexShrink: 0 }}>
+                  {card.cards?.image_url && (
+                    <Image src={card.cards.image_url} alt={card.cards.name ?? ''} fill sizes="32px" className="object-contain" unoptimized />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+        <Link
+          href={`/binder/${player.username}`}
+          style={{ textAlign: 'center', textDecoration: 'none', background: '#FAF6EC', color: '#0A0A0A', border: '2px solid #0A0A0A', fontWeight: 900, fontSize: 12, padding: '8px 0' }}
+        >
+          View Binder
+        </Link>
+        <button
+          onClick={() => onStartTrade(player)}
+          disabled={acting}
+          style={{ background: '#E8233B', color: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: acting ? 'none' : '2px 2px 0 #0A0A0A', fontWeight: 900, fontSize: 12, padding: '8px 0', cursor: acting ? 'not-allowed' : 'pointer', opacity: acting ? 0.55 : 1 }}
+        >
+          Start Trade
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function MatchesPage() {
@@ -250,6 +314,11 @@ export default function MatchesPage() {
   const [loading,   setLoading]   = useState(true)
   const [actingId,  setActingId]  = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabFilter>('ACTIVE')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [playerQuery, setPlayerQuery] = useState('')
+  const [playerResults, setPlayerResults] = useState<PlayerResult[]>([])
+  const [playerLoading, setPlayerLoading] = useState(false)
+  const [startingPlayerId, setStartingPlayerId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/matches-list', { cache: 'no-store' })
@@ -264,6 +333,36 @@ export default function MatchesPage() {
   }, [router])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    const q = playerQuery.trim()
+    if (!searchOpen || q.length < 2) {
+      setPlayerResults([])
+      setPlayerLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      setPlayerLoading(true)
+      try {
+        const res = await fetch(`/api/player-search?q=${encodeURIComponent(q)}`, { signal: controller.signal, cache: 'no-store' })
+        if (res.status === 401) { router.push('/login'); return }
+        if (!res.ok) return
+        const data = await res.json() as { players?: PlayerResult[] }
+        setPlayerResults(data.players ?? [])
+      } catch (err) {
+        if ((err as Error)?.name !== 'AbortError') setPlayerResults([])
+      } finally {
+        setPlayerLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [playerQuery, router, searchOpen])
 
   async function handleAccept(matchId: string) {
     setActingId(matchId)
@@ -286,6 +385,24 @@ export default function MatchesPage() {
       prev.map(m => m.id === matchId ? { ...m, status: 'DECLINED' as MatchStatus } : m)
     )
     setActingId(null)
+  }
+
+  async function handleStartTrade(player: PlayerResult) {
+    if (startingPlayerId) return
+    setStartingPlayerId(player.id)
+    try {
+      const res = await fetch('/api/swipe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ swiped_id: player.id }),
+      })
+      const data = await res.json() as { matchId?: string | null; error?: string }
+      if (res.ok && data.matchId) {
+        router.push(`/matches/${data.matchId}`)
+      }
+    } finally {
+      setStartingPlayerId(null)
+    }
   }
 
   const sorted = sortMatches(matches)
@@ -324,22 +441,73 @@ export default function MatchesPage() {
                 </p>
               )}
             </div>
-            <div
+            <button
+              onClick={() => setSearchOpen(prev => !prev)}
               style={{
                 width:          36,
                 height:         36,
-                background:     '#F4D03F',
+                background:     searchOpen ? '#E8233B' : '#F4D03F',
                 border:         '2px solid #0A0A0A',
                 boxShadow:      '3px 3px 0 #0A0A0A',
                 display:        'flex',
                 alignItems:     'center',
                 justifyContent: 'center',
                 fontSize:       16,
+                cursor:         'pointer',
               }}
+              aria-label="Search players"
             >
               🔍
-            </div>
+            </button>
           </div>
+
+          {searchOpen && (
+            <div style={{ border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', background: '#FAF6EC', overflow: 'hidden' }}>
+              <div style={{ position: 'relative', borderBottom: '2px solid #0A0A0A' }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8B7866', fontSize: 13 }}>🔍</span>
+                <input
+                  type="text"
+                  value={playerQuery}
+                  onChange={e => setPlayerQuery(e.target.value)}
+                  placeholder="Search players…"
+                  autoFocus
+                  style={{ width: '100%', boxSizing: 'border-box', background: '#FAF6EC', border: 'none', outline: 'none', color: '#0A0A0A', fontSize: 14, padding: '11px 40px 11px 36px' }}
+                />
+                {playerQuery && (
+                  <button
+                    onClick={() => setPlayerQuery('')}
+                    style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#0A0A0A', fontWeight: 900, cursor: 'pointer' }}
+                    aria-label="Clear player search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <div style={{ padding: 12 }}>
+                {playerQuery.trim().length < 2 ? (
+                  <p style={{ color: '#8B7866', fontSize: 12, margin: 0 }}>Type at least 2 letters.</p>
+                ) : playerLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 16, height: 16, border: '2px solid #0A0A0A', borderTopColor: '#E8233B', borderRadius: '50%', display: 'block', animation: 'tradeSearchSpin 0.8s linear infinite' }} />
+                    <p style={{ color: '#8B7866', fontSize: 12, margin: 0 }}>Searching…</p>
+                  </div>
+                ) : playerResults.length === 0 ? (
+                  <p style={{ color: '#8B7866', fontSize: 12, margin: 0 }}>No unmatched players found.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {playerResults.map(player => (
+                      <PlayerResultItem
+                        key={player.id}
+                        player={player}
+                        acting={startingPlayerId === player.id}
+                        onStartTrade={handleStartTrade}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Tabs: Active / Pending / Done */}
           <div
@@ -448,6 +616,7 @@ export default function MatchesPage() {
           ))
         )}
       </div>
+      <style>{`@keyframes tradeSearchSpin { to { transform: rotate(360deg); } }`}</style>
     </main>
   )
 }

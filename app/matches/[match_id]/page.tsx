@@ -65,33 +65,11 @@ interface OfferPayload {
   marketLocal: number | null
   currency: string
   offerAmount: number
-  historyPoints: { date: string; price: number }[]
 }
 
 interface CardPriceData {
   price: { market: number | null; inr: number | null; aed: number | null } | null
   history: { date: string; price: number; volume: number }[]
-}
-
-// ─── Price sparkline ──────────────────────────────────────────────────────────
-
-function PriceSparkline({ history }: { history: { date: string; price: number }[] }) {
-  const pts = history.slice(-14)
-  if (pts.length < 2) return null
-  const min = Math.min(...pts.map(p => p.price))
-  const max = Math.max(...pts.map(p => p.price))
-  const range = max - min || 1
-  const W = 200, H = 36
-  const points = pts.map((p, i) => {
-    const x = (i / (pts.length - 1)) * W
-    const y = H - ((p.price - min) / range) * (H - 4) - 2
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 36, display: 'block' }}>
-      <polyline points={points} fill="none" stroke="#E8233B" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  )
 }
 
 // ─── Offer modal ──────────────────────────────────────────────────────────────
@@ -153,7 +131,6 @@ function OfferModal({
       marketLocal:   priceData?.price ? (isIN ? priceData.price.inr : priceData.price.aed) : null,
       currency:      isIN ? 'INR' : 'AED',
       offerAmount:   parseFloat(offerAmt),
-      historyPoints: (priceData?.history ?? []).slice(-14).map(h => ({ date: h.date, price: h.price })),
     }
     onSend(`[OFFER]:${JSON.stringify(payload)}`)
     onClose()
@@ -275,16 +252,6 @@ function OfferModal({
                       <span style={{ color: '#8B7866', fontSize: 12 }}>No data</span>
                     )}
                   </div>
-                  {priceData.history.length >= 2 && (
-                    <div style={{ padding: '10px 14px', borderTop: '2px solid #0A0A0A' }}>
-                      <p style={{ color: '#8B7866', fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 8px' }}>30-Day History</p>
-                      <PriceSparkline history={priceData.history} />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                        <span style={{ color: '#8B7866', fontSize: 9 }}>{priceData.history[0]?.date?.slice(0, 10)}</span>
-                        <span style={{ color: '#8B7866', fontSize: 9 }}>{priceData.history[priceData.history.length - 1]?.date?.slice(0, 10)}</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : null}
 
@@ -880,13 +847,6 @@ export default function ChatPage() {
                               </p>
                             </div>
                           </div>
-                          {/* Sparkline */}
-                          {offerPayload.historyPoints.length >= 2 && (
-                            <div style={{ padding: '8px 12px', borderTop: '2px solid #0A0A0A' }}>
-                              <p style={{ color: '#8B7866', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>Price trend (30 days)</p>
-                              <PriceSparkline history={offerPayload.historyPoints} />
-                            </div>
-                          )}
                           {/* Accept / Decline — receiver only */}
                           {!isMe && (
                             <div style={{ borderTop: '2px solid #0A0A0A', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>

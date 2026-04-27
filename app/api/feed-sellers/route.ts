@@ -7,6 +7,21 @@ const adminSupabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
+interface CardMeta {
+  id: string
+  name: string | null
+  image_url: string | null
+  rarity: string | null
+}
+
+interface SellerCardRow {
+  user_id: string
+  id: string
+  condition: string | null
+  is_foil: boolean | null
+  cards: CardMeta | null
+}
+
 export async function GET() {
   const authClient = await createSupabaseServerClient()
   const { data: { user } } = await authClient.auth.getUser()
@@ -56,15 +71,16 @@ export async function GET() {
       .in('id', unseenIds),
     adminSupabase
       .from('user_cards')
-      .select('user_id, id, condition, is_foil, cards(id, name, image_url)')
+      .select('user_id, id, condition, is_foil, cards(id, name, image_url, rarity)')
       .in('user_id', unseenIds)
       .eq('list_type', 'HAVE')
       .order('created_at', { ascending: false }),
   ])
 
-  // Bulk-fetch prices for all preview card IDs
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const allCardIds = (cardsRes.data ?? []).map(c => (c.cards as any)?.id).filter(Boolean) as string[]
+  const cardRows = (cardsRes.data ?? []) as unknown as SellerCardRow[]
+
+  // Bulk-fetch prices for all feed card IDs
+  const allCardIds = Array.from(new Set(cardRows.map(c => c.cards?.id).filter((id): id is string => Boolean(id))))
   const { data: pricesData } = allCardIds.length > 0
     ? await adminSupabase.from('card_prices').select('card_id, usd_price').in('card_id', allCardIds)
     : { data: [] as Array<{ card_id: string; usd_price: number }> }
@@ -73,9 +89,9 @@ export async function GET() {
   for (const p of pricesData ?? []) priceMap[p.card_id] = p.usd_price
 
   // Group cards by seller
-  const cardsByUser: Record<string, typeof cardsRes.data> = {}
-  for (const card of cardsRes.data ?? []) {
-    const uid = card.user_id as string
+  const cardsByUser: Record<string, SellerCardRow[]> = {}
+  for (const card of cardRows) {
+    const uid = card.user_id
     if (!cardsByUser[uid]) cardsByUser[uid] = []
     cardsByUser[uid]!.push(card)
   }
@@ -86,23 +102,30 @@ export async function GET() {
     countByUser[row.user_id as string] = (countByUser[row.user_id as string] ?? 0) + 1
   }
 
-  const sellers = (profilesRes.data ?? []).map(profile => ({
-    id:           profile.id,
-    username:     profile.username,
-    avatar_url:   profile.avatar_url  ?? null,
-    city:         profile.city        ?? null,
-    country_code: profile.country_code,
-    trade_rating: profile.trade_rating ?? null,
-    card_count:   countByUser[profile.id] ?? 0,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    preview_cards: (cardsByUser[profile.id] ?? []).slice(0, 8).map(c => ({
+  const sellers = (profilesRes.data ?? []).map(profile => {
+    const sellerCards = cardsByUser[profile.id] ?? []
+    const rarities = Array.from(new Set(sellerCards.map(c => c.cards?.rarity).filter((v): v is string => Boolean(v))))
+    const mapCard = (c: SellerCardRow) => ({
       id:        c.id,
       condition: c.condition ?? null,
       is_foil:   c.is_foil ?? false,
       cards:     c.cards ?? null,
-      usd_price: (c.cards as any)?.id ? (priceMap[(c.cards as any).id] ?? null) : null,
-    })),
-  }))
+      usd_price: c.cards?.id ? (priceMap[c.cards.id] ?? null) : null,
+    })
+
+    return {
+      id:           profile.id,
+      username:     profile.username,
+      avatar_url:   profile.avatar_url  ?? null,
+      city:         profile.city        ?? null,
+      country_code: profile.country_code,
+      trade_rating: profile.trade_rating ?? null,
+      card_count:   countByUser[profile.id] ?? 0,
+      rarities,
+      preview_cards: sellerCards.slice(0, 8).map(mapCard),
+      filter_cards:  sellerCards.map(mapCard),
+    }
+  })
 
   return NextResponse.json({ sellers, currentUserId, defaultFilter })
 }
