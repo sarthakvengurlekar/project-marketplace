@@ -85,6 +85,64 @@ const COUNTRY_OPTIONS = [
   { code: 'UAE', flag: '🇦🇪', name: 'UAE'   },
 ]
 
+const BADGE_ART: Record<string, {
+  watermark: string
+  stamp: string
+  pattern: string
+  motif: string
+  accent: string
+}> = {
+  deal_maker: {
+    watermark: 'DONE DEAL',
+    stamp: 'SEALED',
+    pattern: 'linear-gradient(135deg, rgba(10,10,10,0.09) 0 2px, transparent 2px 16px), linear-gradient(45deg, rgba(232,35,59,0.08) 0 2px, transparent 2px 18px)',
+    motif: '<>',
+    accent: '#E8233B',
+  },
+  foil_hunter: {
+    watermark: 'SHINY CHASE',
+    stamp: 'HOLO',
+    pattern: 'repeating-linear-gradient(115deg, rgba(244,208,63,0.42) 0 5px, rgba(250,246,236,0) 5px 14px, rgba(232,35,59,0.13) 14px 18px, rgba(250,246,236,0) 18px 28px)',
+    motif: '*',
+    accent: '#F4D03F',
+  },
+  high_roller: {
+    watermark: 'BIG STACKS',
+    stamp: 'VALUE',
+    pattern: 'radial-gradient(circle at 18% 24%, transparent 0 15px, rgba(10,10,10,0.12) 16px 18px, transparent 19px), radial-gradient(circle at 82% 72%, transparent 0 20px, rgba(232,35,59,0.11) 21px 23px, transparent 24px)',
+    motif: '$',
+    accent: '#E8233B',
+  },
+  set_collector: {
+    watermark: 'FULL SET',
+    stamp: 'BINDER',
+    pattern: 'linear-gradient(rgba(10,10,10,0.1) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(10,10,10,0.1) 1.5px, transparent 1.5px)',
+    motif: '[]',
+    accent: '#F4D03F',
+  },
+  rare_taste: {
+    watermark: 'RARE AIR',
+    stamp: 'CHASE',
+    pattern: 'radial-gradient(circle at 24% 34%, rgba(232,35,59,0.13) 0 3px, transparent 4px), radial-gradient(circle at 72% 28%, rgba(244,208,63,0.36) 0 4px, transparent 5px), radial-gradient(circle at 58% 78%, rgba(10,10,10,0.1) 0 3px, transparent 4px)',
+    motif: '<>',
+    accent: '#E8233B',
+  },
+  slab_master: {
+    watermark: 'LOCKED IN',
+    stamp: 'GRADED',
+    pattern: 'linear-gradient(90deg, rgba(10,10,10,0.13) 0 2px, transparent 2px 52px), linear-gradient(rgba(10,10,10,0.12) 0 2px, transparent 2px 40px)',
+    motif: '10',
+    accent: '#F4D03F',
+  },
+  sharp_eye: {
+    watermark: 'SCAN MODE',
+    stamp: 'FOCUS',
+    pattern: 'linear-gradient(90deg, rgba(232,35,59,0.18) 0 2px, transparent 2px 24px), linear-gradient(rgba(10,10,10,0.1) 0 2px, transparent 2px 24px)',
+    motif: '[]',
+    accent: '#E8233B',
+  },
+}
+
 // ─── Badge helpers ───────────────────────────────────────────────────────────
 
 function buildCountBadge(
@@ -205,28 +263,349 @@ function buildBadges(stats: Stats, countryCode: string): BadgeProgress[] {
   ]
 }
 
+function BadgeIcon({
+  badgeId,
+  fallback,
+  unlocked,
+  accent,
+}: {
+  badgeId: string
+  fallback: string
+  unlocked: boolean
+  accent: string
+}) {
+  const iconBg = unlocked ? '#F4D03F' : '#FAF6EC'
+  const muted = unlocked ? '#0A0A0A' : '#8B7866'
+  const red = unlocked ? '#E8233B' : '#8B7866'
+
+  const icon = (() => {
+    switch (badgeId) {
+      case 'deal_maker':
+        return (
+          <svg viewBox="0 0 64 64" aria-hidden style={{ width: 42, height: 42, display: 'block' }}>
+            <rect x="9" y="14" width="21" height="29" fill="#FAF6EC" stroke={muted} strokeWidth="4" />
+            <rect x="34" y="21" width="21" height="29" fill="#FAF6EC" stroke={muted} strokeWidth="4" />
+            <path d="M22 45 L30 53 L43 40" fill="none" stroke={red} strokeWidth="5" strokeLinecap="square" strokeLinejoin="miter" />
+            <path d="M18 26 H28 M36 33 H48" stroke={muted} strokeWidth="4" strokeLinecap="square" />
+          </svg>
+        )
+      case 'foil_hunter':
+        return (
+          <svg viewBox="0 0 64 64" aria-hidden style={{ width: 42, height: 42, display: 'block' }}>
+            <rect x="16" y="9" width="32" height="46" fill="#FAF6EC" stroke={muted} strokeWidth="4" />
+            <path d="M22 48 L43 15 M18 35 L34 11 M32 53 L48 28" stroke={accent} strokeWidth="4" strokeLinecap="square" />
+            <path d="M48 8 L51 16 L59 19 L51 22 L48 30 L45 22 L37 19 L45 16 Z" fill={red} />
+            <path d="M13 11 L15 16 L20 18 L15 20 L13 25 L11 20 L6 18 L11 16 Z" fill={muted} />
+          </svg>
+        )
+      case 'high_roller':
+        return (
+          <svg viewBox="0 0 64 64" aria-hidden style={{ width: 42, height: 42, display: 'block' }}>
+            <ellipse cx="32" cy="16" rx="18" ry="8" fill="#FAF6EC" stroke={muted} strokeWidth="4" />
+            <path d="M14 16 V42 C14 46 22 51 32 51 C42 51 50 46 50 42 V16" fill="#FAF6EC" stroke={muted} strokeWidth="4" />
+            <path d="M14 29 C14 34 22 38 32 38 C42 38 50 34 50 29" fill="none" stroke={muted} strokeWidth="4" />
+            <text x="32" y="32" textAnchor="middle" dominantBaseline="middle" fontSize={fallback.length > 2 ? '10' : '18'} fontWeight="900" fill={red}>{fallback}</text>
+          </svg>
+        )
+      case 'set_collector':
+        return (
+          <svg viewBox="0 0 64 64" aria-hidden style={{ width: 42, height: 42, display: 'block' }}>
+            {[10, 28].map((x, ix) => [9, 31].map((y, iy) => (
+              <rect key={`${ix}-${iy}`} x={x} y={y} width="16" height="20" fill="#FAF6EC" stroke={muted} strokeWidth="3" />
+            )))}
+            <path d="M43 47 L49 53 L58 39" fill="none" stroke={red} strokeWidth="5" strokeLinecap="square" strokeLinejoin="miter" />
+          </svg>
+        )
+      case 'rare_taste':
+        return (
+          <svg viewBox="0 0 64 64" aria-hidden style={{ width: 42, height: 42, display: 'block' }}>
+            <path d="M32 7 L54 24 L32 57 L10 24 Z" fill="#FAF6EC" stroke={muted} strokeWidth="4" strokeLinejoin="miter" />
+            <path d="M18 24 H46 M24 15 L32 57 M40 15 L32 57" stroke={red} strokeWidth="3" />
+            <path d="M50 7 L52 13 L58 15 L52 17 L50 23 L48 17 L42 15 L48 13 Z" fill={accent} stroke={muted} strokeWidth="2" />
+          </svg>
+        )
+      case 'slab_master':
+        return (
+          <svg viewBox="0 0 64 64" aria-hidden style={{ width: 42, height: 42, display: 'block' }}>
+            <rect x="13" y="6" width="38" height="52" fill="#FAF6EC" stroke={muted} strokeWidth="4" />
+            <rect x="18" y="12" width="28" height="10" fill={accent} stroke={muted} strokeWidth="3" />
+            <rect x="21" y="27" width="22" height="24" fill="#FAF6EC" stroke={muted} strokeWidth="3" />
+            <text x="32" y="19" textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="900" fill={muted}>10</text>
+          </svg>
+        )
+      case 'sharp_eye':
+        return (
+          <svg viewBox="0 0 64 64" aria-hidden style={{ width: 42, height: 42, display: 'block' }}>
+            <path d="M12 24 V12 H24 M40 12 H52 V24 M52 40 V52 H40 M24 52 H12 V40" fill="none" stroke={muted} strokeWidth="5" strokeLinecap="square" />
+            <circle cx="32" cy="32" r="12" fill="#FAF6EC" stroke={red} strokeWidth="4" />
+            <path d="M32 18 V26 M32 38 V46 M18 32 H26 M38 32 H46" stroke={muted} strokeWidth="4" strokeLinecap="square" />
+          </svg>
+        )
+      default:
+        return <span style={{ color: muted, fontWeight: 900, fontSize: fallback.length > 2 ? 9 : 18 }}>{fallback}</span>
+    }
+  })()
+
+  return (
+    <div style={{ position: 'relative', width: 66, height: 66, flexShrink: 0 }}>
+      <div style={{
+        position: 'absolute',
+        inset: '6px 0 0 6px',
+        background: '#0A0A0A',
+      }} />
+      <div style={{
+        position: 'relative',
+        width: 60,
+        height: 60,
+        background: iconBg,
+        border: '3px solid #0A0A0A',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <div style={{
+          position: 'absolute',
+          inset: 5,
+          border: `1.5px solid ${unlocked ? 'rgba(10,10,10,0.35)' : 'rgba(139,120,102,0.35)'}`,
+          pointerEvents: 'none',
+        }} />
+        {icon}
+      </div>
+    </div>
+  )
+}
+
+function BadgeWatermark({
+  badgeId,
+  art,
+  unlocked,
+}: {
+  badgeId: string
+  art: typeof BADGE_ART[string]
+  unlocked: boolean
+}) {
+  const ink = unlocked ? art.accent : '#8B7866'
+  const black = '#0A0A0A'
+  const yellow = '#F4D03F'
+  const words = art.watermark.split(' ')
+
+  const motif = (() => {
+    switch (badgeId) {
+      case 'deal_maker':
+        return (
+          <svg viewBox="0 0 180 130" aria-hidden style={{ width: 190, height: 136, display: 'block' }}>
+            <rect x="30" y="30" width="42" height="58" fill="none" stroke={black} strokeWidth="8" />
+            <rect x="108" y="42" width="42" height="58" fill="none" stroke={ink} strokeWidth="8" />
+            <path d="M74 46 H109 L99 35 M106 84 H71 L81 95" fill="none" stroke={black} strokeWidth="8" strokeLinecap="square" strokeLinejoin="miter" />
+            <path d="M61 76 L78 93 L113 59" fill="none" stroke={ink} strokeWidth="8" strokeLinecap="square" strokeLinejoin="miter" />
+          </svg>
+        )
+      case 'foil_hunter':
+        return (
+          <svg viewBox="0 0 180 130" aria-hidden style={{ width: 190, height: 136, display: 'block' }}>
+            <rect x="48" y="18" width="66" height="92" fill="none" stroke={black} strokeWidth="8" />
+            <path d="M57 100 L107 27 M45 74 L83 18 M80 112 L123 52" stroke={yellow} strokeWidth="7" strokeLinecap="square" />
+            <path d="M130 12 L139 36 L164 45 L139 54 L130 78 L121 54 L96 45 L121 36 Z" fill={ink} />
+            <path d="M34 24 L39 38 L54 43 L39 48 L34 62 L29 48 L14 43 L29 38 Z" fill={black} />
+          </svg>
+        )
+      case 'high_roller':
+        return (
+          <svg viewBox="0 0 180 130" aria-hidden style={{ width: 190, height: 136, display: 'block' }}>
+            <ellipse cx="91" cy="32" rx="47" ry="17" fill="none" stroke={ink} strokeWidth="9" />
+            <path d="M44 32 V89 C44 104 65 116 91 116 C117 116 138 104 138 89 V32" fill="none" stroke={black} strokeWidth="8" />
+            <path d="M44 61 C44 76 65 88 91 88 C117 88 138 76 138 61" fill="none" stroke={ink} strokeWidth="8" />
+          </svg>
+        )
+      case 'set_collector':
+        return (
+          <svg viewBox="0 0 180 130" aria-hidden style={{ width: 190, height: 136, display: 'block' }}>
+            {[25, 62, 99, 136].map(x => <path key={x} d={`M${x} 7 V123`} stroke={black} strokeWidth="4" />)}
+            {[20, 56, 92].map(y => <path key={y} d={`M16 ${y} H164`} stroke={black} strokeWidth="4" />)}
+            <rect x="28" y="23" width="35" height="52" fill="none" stroke={ink} strokeWidth="7" />
+            <rect x="73" y="23" width="35" height="52" fill="none" stroke={ink} strokeWidth="7" />
+            <rect x="118" y="23" width="35" height="52" fill="none" stroke={ink} strokeWidth="7" />
+          </svg>
+        )
+      case 'rare_taste':
+        return (
+          <svg viewBox="0 0 180 130" aria-hidden style={{ width: 190, height: 136, display: 'block' }}>
+            <path d="M91 13 L155 61 L91 119 L27 61 Z" fill="none" stroke={ink} strokeWidth="9" strokeLinejoin="miter" />
+            <path d="M48 61 H134 M69 31 L91 119 M113 31 L91 119" stroke={black} strokeWidth="6" />
+            <path d="M30 13 L38 34 L61 42 L38 50 L30 72 L22 50 L0 42 L22 34 Z" fill={yellow} />
+          </svg>
+        )
+      case 'slab_master':
+        return (
+          <svg viewBox="0 0 180 130" aria-hidden style={{ width: 190, height: 136, display: 'block' }}>
+            <rect x="50" y="8" width="78" height="114" fill="none" stroke={black} strokeWidth="9" />
+            <rect x="63" y="22" width="52" height="22" fill="none" stroke={ink} strokeWidth="7" />
+            <rect x="67" y="59" width="44" height="48" fill="none" stroke={black} strokeWidth="7" />
+          </svg>
+        )
+      case 'sharp_eye':
+        return (
+          <svg viewBox="0 0 180 130" aria-hidden style={{ width: 190, height: 136, display: 'block' }}>
+            <path d="M33 48 V17 H64 M116 17 H147 V48 M147 82 V113 H116 M64 113 H33 V82" fill="none" stroke={ink} strokeWidth="10" strokeLinecap="square" />
+            <circle cx="90" cy="65" r="30" fill="none" stroke={black} strokeWidth="8" />
+            <path d="M90 23 V53 M90 77 V107 M48 65 H78 M102 65 H132" stroke={ink} strokeWidth="7" />
+          </svg>
+        )
+      default:
+        return null
+    }
+  })()
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 112,
+        background: unlocked ? 'rgba(244,208,63,0.2)' : 'rgba(139,120,102,0.08)',
+        borderLeft: '2px solid rgba(10,10,10,0.08)',
+        zIndex: 0,
+        pointerEvents: 'none',
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{
+        position: 'absolute',
+        right: -52,
+        top: 10,
+        opacity: unlocked ? 0.11 : 0.07,
+        transform: 'rotate(-8deg) scale(0.72)',
+        transformOrigin: 'center',
+      }}>
+        {motif}
+      </div>
+      <div style={{
+        position: 'absolute',
+        right: 8,
+        bottom: 10,
+        width: 94,
+        color: ink,
+        opacity: unlocked ? 0.5 : 0.32,
+        transform: 'rotate(-4deg)',
+        textAlign: 'right',
+        fontFamily: 'var(--font-poppins), Poppins, Arial, sans-serif',
+        fontSize: 12,
+        fontWeight: 900,
+        lineHeight: 0.96,
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+      }}>
+        {words.map(word => (
+          <span key={word} style={{ display: 'block' }}>{word}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ProfileStatIcon({ type, active }: { type: 'cards' | 'value' | 'trades' | 'rating'; active?: boolean }) {
+  const accent = active ? '#E8233B' : '#F4D03F'
+  const cream = '#FAF6EC'
+  const muted = '#8B7866'
+
+  switch (type) {
+    case 'cards':
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden style={{ width: 24, height: 24, margin: '0 auto 5px', display: 'block' }}>
+          <rect x="7" y="5" width="13" height="19" fill="none" stroke={cream} strokeWidth="3" />
+          <rect x="12" y="8" width="13" height="19" fill="none" stroke={accent} strokeWidth="3" />
+        </svg>
+      )
+    case 'value':
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden style={{ width: 24, height: 24, margin: '0 auto 5px', display: 'block' }}>
+          <ellipse cx="16" cy="8" rx="9" ry="4" fill="none" stroke={accent} strokeWidth="3" />
+          <path d="M7 8 V22 C7 25 11 28 16 28 C21 28 25 25 25 22 V8" fill="none" stroke={cream} strokeWidth="3" />
+          <path d="M7 15 C7 18 11 20 16 20 C21 20 25 18 25 15" fill="none" stroke={muted} strokeWidth="2.5" />
+        </svg>
+      )
+    case 'trades':
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden style={{ width: 24, height: 24, margin: '0 auto 5px', display: 'block' }}>
+          <path d="M6 11 H23 L18 6 M26 21 H9 L14 26" fill="none" stroke={cream} strokeWidth="3" strokeLinecap="square" strokeLinejoin="miter" />
+          <path d="M6 21 H14 M18 11 H26" stroke={accent} strokeWidth="3" strokeLinecap="square" />
+        </svg>
+      )
+    case 'rating':
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden style={{ width: 24, height: 24, margin: '0 auto 5px', display: 'block' }}>
+          <path d="M16 4 L19.5 12 L28 12.8 L21.5 18.3 L23.5 27 L16 22.5 L8.5 27 L10.5 18.3 L4 12.8 L12.5 12 Z" fill="none" stroke={accent} strokeWidth="3" strokeLinejoin="miter" />
+        </svg>
+      )
+  }
+}
+
 function BadgeCard({ badge }: { badge: BadgeProgress }) {
   const unlocked = badge.stages.some(s => s.complete)
+  const art = BADGE_ART[badge.id] ?? {
+    watermark: badge.name.toUpperCase(),
+    stamp: 'BADGE',
+    pattern: 'linear-gradient(135deg, rgba(10,10,10,0.08) 0 2px, transparent 2px 18px)',
+    motif: '*',
+    accent: '#E8233B',
+  }
+
   return (
-    <div style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: unlocked ? '4px 4px 0 #0A0A0A' : 'none', opacity: unlocked ? 1 : 0.72, padding: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <div style={{ width: 44, height: 44, flexShrink: 0, background: unlocked ? '#F4D03F' : '#f0ece2', border: '2px solid #0A0A0A', boxShadow: unlocked ? '2px 2px 0 #0A0A0A' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0A0A0A', fontWeight: 900, fontSize: badge.icon.length > 2 ? 9 : 18 }}>
-          {badge.icon}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+    <div style={{
+      position: 'relative',
+      overflow: 'hidden',
+      background: unlocked ? '#FAF6EC' : '#f3ede0',
+      border: '2px solid #0A0A0A',
+      boxShadow: unlocked ? '4px 4px 0 #0A0A0A' : '2px 2px 0 rgba(10,10,10,0.35)',
+      opacity: unlocked ? 1 : 0.76,
+      padding: 14,
+      paddingRight: 102,
+      minHeight: 158,
+      isolation: 'isolate',
+    }}>
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: art.pattern,
+          backgroundSize: badge.id === 'set_collector' ? '34px 44px' : undefined,
+          opacity: badge.id === 'foil_hunter'
+            ? (unlocked ? 0.1 : 0.05)
+            : (unlocked ? 0.05 : 0.025),
+          zIndex: 0,
+        }}
+      />
+      <BadgeWatermark badgeId={badge.id} art={art} unlocked={unlocked} />
+
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <BadgeIcon badgeId={badge.id} fallback={badge.icon} unlocked={unlocked} accent={art.accent} />
+        <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 14, margin: 0 }}>{badge.name}</p>
-            <span style={{ background: unlocked ? '#E8233B' : '#FAF6EC', color: unlocked ? '#FAF6EC' : '#8B7866', border: '1.5px solid #0A0A0A', fontSize: 9, fontWeight: 900, padding: '2px 6px', whiteSpace: 'nowrap' }}>
+            <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16, margin: 0, lineHeight: 1.05 }}>{badge.name}</p>
+            <span style={{
+              background: unlocked ? '#E8233B' : '#FAF6EC',
+              color: unlocked ? '#FAF6EC' : '#8B7866',
+              border: '1.5px solid #0A0A0A',
+              boxShadow: unlocked ? '2px 2px 0 #0A0A0A' : 'none',
+              fontSize: 9,
+              fontWeight: 900,
+              padding: '2px 6px',
+              whiteSpace: 'nowrap',
+            }}>
               {badge.level}
             </span>
           </div>
-          <p style={{ color: '#8B7866', fontSize: 11, margin: '4px 0 8px' }}>{badge.sub}</p>
-          <div style={{ height: 8, background: '#f0ece2', border: '1.5px solid #0A0A0A', overflow: 'hidden' }}>
-            <div style={{ width: `${badge.progress}%`, height: '100%', background: unlocked ? '#E8233B' : '#8B7866' }} />
+          <p style={{ color: '#8B7866', fontSize: 11, margin: '7px 0 10px', fontWeight: 900 }}>{badge.sub}</p>
+          <div style={{ height: 10, background: '#FAF6EC', border: '1.5px solid #0A0A0A', overflow: 'hidden', boxShadow: '2px 2px 0 rgba(10,10,10,0.18)', maxWidth: 230 }}>
+            <div style={{ width: `${badge.progress}%`, height: '100%', background: unlocked ? art.accent : '#8B7866' }} />
           </div>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 5, overflowX: 'auto', scrollbarWidth: 'none', marginTop: 10 } as React.CSSProperties}>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 14, paddingLeft: 78 } as React.CSSProperties}>
         {badge.stages.map(stage => (
           <span
             key={stage.key}
@@ -236,6 +615,7 @@ function BadgeCard({ badge }: { badge: BadgeProgress }) {
               background: stage.complete ? '#0A0A0A' : '#FAF6EC',
               color: stage.complete ? '#FAF6EC' : '#8B7866',
               border: '1.5px solid #0A0A0A',
+              boxShadow: stage.complete ? '2px 2px 0 rgba(10,10,10,0.22)' : 'none',
               fontWeight: 900,
               fontSize: 8,
               padding: '2px 6px',
@@ -467,7 +847,7 @@ function EditProfileModal({
 
 function ProfileSkeleton() {
   return (
-    <div className="animate-pulse">
+    <div className="animate-pulse max-w-lg mx-auto">
       <div style={{ height: 120, background: '#e8e2d4' }} />
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: -36, paddingBottom: 20, gap: 10 }}>
         <div style={{ width: 72, height: 72, background: '#e8e2d4', border: '2px solid #0A0A0A' }} />
@@ -599,7 +979,8 @@ export default function ProfilePage() {
   const initials      = profile.username[0]?.toUpperCase() ?? '?'
 
   return (
-    <div className="min-h-screen pb-28" style={{ background: '#FAF6EC' }}>
+    <main className="min-h-screen pb-28" style={{ background: '#FAF6EC' }}>
+      <div className="max-w-lg mx-auto" style={{ minHeight: '100vh', background: '#FAF6EC' }}>
 
       {/* ── Header banner (diagonal stripe) ─────────────────────────────── */}
       <div style={{ position: 'relative' }}>
@@ -679,21 +1060,22 @@ export default function ProfilePage() {
       <div style={{ padding: '0 16px 16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', border: '2px solid #0A0A0A', overflow: 'hidden' }}>
           {[
-            { label: 'CARDS',  value: stats.card_count.toLocaleString() },
-            { label: 'VALUE',  value: collectionVal, red: true },
-            { label: 'TRADES', value: stats.trade_count.toLocaleString() },
-            { label: 'RATING', value: `${ratingDisplay}` },
+            { label: 'CARDS',  value: stats.card_count.toLocaleString(), icon: 'cards' as const },
+            { label: 'VALUE',  value: collectionVal, red: true, icon: 'value' as const },
+            { label: 'TRADES', value: stats.trade_count.toLocaleString(), icon: 'trades' as const },
+            { label: 'RATING', value: `${ratingDisplay}`, icon: 'rating' as const },
           ].map((s, i, arr) => (
             <div
               key={s.label}
               style={{
-                padding:     '12px 8px',
+                padding:     '10px 6px',
                 textAlign:   'center',
                 background:  '#0A0A0A',
                 borderRight: i < arr.length - 1 ? '2px solid #FAF6EC' : 'none',
               }}
             >
-              <p style={{ color: s.red ? '#E8233B' : '#FAF6EC', fontWeight: 900, fontSize: 15, margin: 0, lineHeight: 1.2 }}>{s.value}</p>
+              <ProfileStatIcon type={s.icon} active={s.red} />
+              <p style={{ color: s.red ? '#E8233B' : '#FAF6EC', fontWeight: 900, fontSize: 14, margin: 0, lineHeight: 1.15, whiteSpace: 'nowrap' }}>{s.value}</p>
               <p style={{ color: '#8B7866', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '4px 0 0' }}>{s.label}</p>
             </div>
           ))}
@@ -796,6 +1178,7 @@ export default function ProfilePage() {
           Sign Out
         </button>
       </div>
+      </div>
 
       {/* ── Edit modal ───────────────────────────────────────────────────── */}
       {editOpen && (
@@ -809,6 +1192,6 @@ export default function ProfilePage() {
       {badgeUnlock && (
         <BadgeUnlockModal unlock={badgeUnlock} onClose={closeBadgeUnlock} />
       )}
-    </div>
+    </main>
   )
 }

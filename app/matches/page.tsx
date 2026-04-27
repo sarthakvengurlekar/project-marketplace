@@ -8,7 +8,7 @@ import Link from 'next/link'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type MatchStatus = 'PENDING' | 'ACTIVE' | 'DECLINED' | 'COMPLETED'
-type TabFilter = 'ACTIVE' | 'PENDING' | 'DONE'
+type TabFilter = 'CHATBOX' | 'PENDING' | 'DONE'
 
 interface OtherUser {
   id: string
@@ -27,6 +27,21 @@ interface MatchRow {
   created_at: string
   otherUser: OtherUser | null
   lastMessage: { content: string; created_at: string; isUnread: boolean } | null
+  completedOffers: CompletedOffer[]
+}
+
+interface CompletedOffer {
+  acceptedAt: string
+  acceptedBy: string
+  cardName: string
+  imageUrl: string | null
+  setName: string | null
+  condition: string | null
+  isFoil: boolean
+  marketLocal: number | null
+  currency: string
+  offerAmount: number | null
+  summary: string
 }
 
 interface PlayerResult extends OtherUser {
@@ -65,6 +80,16 @@ function sortMatches(list: MatchRow[]): MatchRow[] {
     const bt = b.lastMessage?.created_at ?? b.created_at
     return new Date(bt).getTime() - new Date(at).getTime()
   })
+}
+
+function money(amount: number | null, currency: string) {
+  if (amount == null) return 'Price unavailable'
+  return `${currency === 'AED' ? 'AED ' : '₹'}${amount.toLocaleString('en-IN')}`
+}
+
+function tabLabel(tab: TabFilter) {
+  if (tab === 'CHATBOX') return 'CHATBOX'
+  return tab
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -129,6 +154,63 @@ function StatusBadge({ status }: { status: MatchStatus }) {
   )
 }
 
+function CompletedOfferCard({ offer }: { offer: CompletedOffer }) {
+  return (
+    <div style={{
+      marginTop: 12,
+      border: '2px solid #0A0A0A',
+      background: '#FAF6EC',
+      boxShadow: '3px 3px 0 #E8233B',
+      overflow: 'hidden',
+    }}>
+      <div style={{ display: 'flex', gap: 10, padding: 10, alignItems: 'center' }}>
+        <div style={{
+          position: 'relative',
+          width: 46,
+          height: 64,
+          flexShrink: 0,
+          background: '#f0ece2',
+          border: '2px solid #0A0A0A',
+          overflow: 'hidden',
+        }}>
+          {offer.imageUrl ? (
+            <Image src={offer.imageUrl} alt={offer.cardName} fill sizes="46px" className="object-contain" unoptimized />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8B7866', fontWeight: 900 }}>TCG</div>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 13, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {offer.cardName}
+          </p>
+          {offer.setName && (
+            <p style={{ color: '#8B7866', fontSize: 10, margin: '2px 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {offer.setName}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {offer.condition && <span style={{ background: '#0A0A0A', color: '#FAF6EC', fontSize: 8, fontWeight: 900, padding: '2px 5px' }}>{offer.condition}</span>}
+            {offer.isFoil && <span style={{ background: '#F4D03F', color: '#0A0A0A', border: '1px solid #0A0A0A', fontSize: 8, fontWeight: 900, padding: '2px 5px' }}>FOIL</span>}
+            <span style={{ background: '#E8233B', color: '#FAF6EC', fontSize: 8, fontWeight: 900, padding: '2px 5px' }}>ACCEPTED</span>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: offer.marketLocal != null ? '1fr 1fr' : '1fr', borderTop: '2px solid #0A0A0A' }}>
+        {offer.marketLocal != null && (
+          <div style={{ padding: '8px 10px', borderRight: '2px solid #0A0A0A' }}>
+            <p style={{ color: '#8B7866', fontSize: 9, fontWeight: 900, margin: '0 0 2px' }}>MARKET</p>
+            <p style={{ color: '#0A0A0A', fontSize: 13, fontWeight: 900, margin: 0 }}>{money(offer.marketLocal, offer.currency)}</p>
+          </div>
+        )}
+        <div style={{ padding: '8px 10px', background: '#E8233B' }}>
+          <p style={{ color: 'rgba(250,246,236,0.75)', fontSize: 9, fontWeight: 900, margin: '0 0 2px' }}>OFFER</p>
+          <p style={{ color: '#FAF6EC', fontSize: 13, fontWeight: 900, margin: 0 }}>{money(offer.offerAmount, offer.currency)}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Match row ────────────────────────────────────────────────────────────────
 
 function MatchItem({
@@ -136,16 +218,20 @@ function MatchItem({
   onAccept,
   onDecline,
   acting,
+  showCompletedOffers,
 }: {
   match: MatchRow
   onAccept: (id: string) => void
   onDecline: (id: string) => void
   acting: boolean
+  showCompletedOffers: boolean
 }) {
   const other = match.otherUser
   const isPendingSeller = match.role === 'SELLER' && match.status === 'PENDING'
   const timestamp = match.lastMessage?.created_at ?? match.created_at
   const isUnread = match.lastMessage?.isUnread
+  const isPending = match.status === 'PENDING'
+  const completedOffers = match.completedOffers ?? []
 
   return (
     <Link
@@ -154,7 +240,7 @@ function MatchItem({
         display:     'block',
         background:  '#FAF6EC',
         border:      '2px solid #0A0A0A',
-        boxShadow:   isUnread ? '4px 4px 0 #E8233B' : '3px 3px 0 #0A0A0A',
+        boxShadow:   isUnread ? '4px 4px 0 #E8233B' : isPending ? '4px 4px 0 #F4D03F' : '3px 3px 0 #0A0A0A',
         marginBottom: 12,
         textDecoration: 'none',
       }}
@@ -174,6 +260,11 @@ function MatchItem({
                 @{other?.username ?? '—'}
               </span>
               <StatusBadge status={match.status} />
+              {isPending && (
+                <span style={{ background: isPendingSeller ? '#E8233B' : '#F4D03F', color: isPendingSeller ? '#FAF6EC' : '#0A0A0A', border: '1.5px solid #0A0A0A', fontSize: 9, fontWeight: 900, padding: '2px 6px' }}>
+                  {isPendingSeller ? 'ACTION NEEDED' : 'WAITING'}
+                </span>
+              )}
             </div>
 
             {other && (other.city || other.country_code) && (
@@ -205,6 +296,17 @@ function MatchItem({
           <p style={{ color: '#8B7866', fontSize: 12, margin: '10px 0 0', fontStyle: 'italic' }}>
             No messages yet
           </p>
+        )}
+
+        {showCompletedOffers && completedOffers.length > 0 && (
+          <div>
+            <p style={{ color: '#E8233B', fontWeight: 900, fontSize: 10, letterSpacing: '0.08em', margin: '12px 0 0', textTransform: 'uppercase' }}>
+              {completedOffers.length} completed offer{completedOffers.length === 1 ? '' : 's'}
+            </p>
+            {completedOffers.map((offer, index) => (
+              <CompletedOfferCard key={`${offer.acceptedAt}-${index}`} offer={offer} />
+            ))}
+          </div>
         )}
 
         {/* Accept / Decline — seller only on PENDING */}
@@ -313,7 +415,7 @@ export default function MatchesPage() {
   const [matches,   setMatches]   = useState<MatchRow[]>([])
   const [loading,   setLoading]   = useState(true)
   const [actingId,  setActingId]  = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<TabFilter>('ACTIVE')
+  const [activeTab, setActiveTab] = useState<TabFilter>('CHATBOX')
   const [searchOpen, setSearchOpen] = useState(false)
   const [playerQuery, setPlayerQuery] = useState('')
   const [playerResults, setPlayerResults] = useState<PlayerResult[]>([])
@@ -408,13 +510,14 @@ export default function MatchesPage() {
   const sorted = sortMatches(matches)
 
   const tabMatches: Record<TabFilter, MatchRow[]> = {
-    ACTIVE:  sorted.filter(m => m.status === 'ACTIVE'),
+    CHATBOX: sorted.filter(m => m.status === 'ACTIVE'),
     PENDING: sorted.filter(m => m.status === 'PENDING'),
-    DONE:    sorted.filter(m => m.status === 'DECLINED' || m.status === 'COMPLETED'),
+    DONE:    sorted.filter(m => (m.completedOffers?.length ?? 0) > 0 || m.status === 'COMPLETED'),
   }
 
-  const activeBadgeCount = tabMatches.ACTIVE.filter(m => m.lastMessage?.isUnread).length
+  const activeBadgeCount = tabMatches.CHATBOX.filter(m => m.lastMessage?.isUnread).length
   const pendingCount     = tabMatches.PENDING.length
+  const doneCount        = tabMatches.DONE.reduce((sum, match) => sum + Math.max(match.completedOffers?.length ?? 0, match.status === 'COMPLETED' ? 1 : 0), 0)
 
   const visibleMatches = tabMatches[activeTab]
 
@@ -437,7 +540,7 @@ export default function MatchesPage() {
               <h1 className="font-black text-xl leading-none" style={{ color: '#0A0A0A' }}>Trades</h1>
               {!loading && (
                 <p className="text-xs mt-0.5" style={{ color: '#8B7866' }}>
-                  {activeCount} active{unreadCount > 0 ? ` · ${unreadCount} unread` : ''}
+                  {activeCount} chat{activeCount === 1 ? '' : 's'}{unreadCount > 0 ? ` · ${unreadCount} unread` : ''}
                 </p>
               )}
             </div>
@@ -509,12 +612,12 @@ export default function MatchesPage() {
             </div>
           )}
 
-          {/* Tabs: Active / Pending / Done */}
+          {/* Tabs: Chatbox / Pending / Done */}
           <div
             className="grid grid-cols-3 overflow-hidden"
             style={{ border: '2px solid #0A0A0A' }}
           >
-            {(['ACTIVE', 'PENDING', 'DONE'] as TabFilter[]).map((tab, i, arr) => (
+            {(['CHATBOX', 'PENDING', 'DONE'] as TabFilter[]).map((tab, i, arr) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -525,8 +628,8 @@ export default function MatchesPage() {
                   borderRight: i < arr.length - 1 ? '2px solid #0A0A0A' : 'none',
                 }}
               >
-                {tab}
-                {tab === 'ACTIVE' && activeBadgeCount > 0 && (
+                {tabLabel(tab)}
+                {tab === 'CHATBOX' && activeBadgeCount > 0 && (
                   <span style={{
                     background: '#E8233B', color: '#FAF6EC',
                     fontSize: 9, fontWeight: 900,
@@ -544,6 +647,16 @@ export default function MatchesPage() {
                     minWidth: 16, textAlign: 'center',
                   }}>
                     {pendingCount}
+                  </span>
+                )}
+                {tab === 'DONE' && doneCount > 0 && (
+                  <span style={{
+                    background: '#E8233B', color: '#FAF6EC',
+                    fontSize: 9, fontWeight: 900,
+                    padding: '1px 5px',
+                    minWidth: 16, textAlign: 'center',
+                  }}>
+                    {doneCount}
                   </span>
                 )}
               </button>
@@ -582,19 +695,19 @@ export default function MatchesPage() {
             style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
           >
             <span className="text-5xl mb-4 block">
-              {activeTab === 'ACTIVE' ? '💬' : activeTab === 'PENDING' ? '⏳' : '✓'}
+              {activeTab === 'CHATBOX' ? '💬' : activeTab === 'PENDING' ? '⏳' : '✓'}
             </span>
             <h2 className="font-black text-lg mb-2" style={{ color: '#0A0A0A' }}>
-              {activeTab === 'ACTIVE' ? 'No active trades' : activeTab === 'PENDING' ? 'No pending trades' : 'No completed trades'}
+              {activeTab === 'CHATBOX' ? 'No active chats' : activeTab === 'PENDING' ? 'No pending trades' : 'No completed offers'}
             </h2>
             <p className="text-sm leading-relaxed mb-5" style={{ color: '#8B7866' }}>
-              {activeTab === 'ACTIVE'
-                ? 'Browse the feed to find sellers and start trading!'
+              {activeTab === 'CHATBOX'
+                ? 'Browse the feed to find traders and open a chatbox.'
                 : activeTab === 'PENDING'
-                ? 'Trade requests you send will appear here.'
-                : 'Completed and declined trades show up here.'}
+                ? 'Trade requests waiting for a response show up here.'
+                : 'Accepted offers show up here with card and price details.'}
             </p>
-            {activeTab === 'ACTIVE' && (
+            {activeTab === 'CHATBOX' && (
               <Link
                 href="/feed"
                 className="inline-block text-sm font-black px-5 py-2.5"
@@ -612,6 +725,7 @@ export default function MatchesPage() {
               onAccept={handleAccept}
               onDecline={handleDecline}
               acting={actingId === match.id}
+              showCompletedOffers={activeTab === 'DONE'}
             />
           ))
         )}
