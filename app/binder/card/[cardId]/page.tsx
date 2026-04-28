@@ -179,7 +179,16 @@ export default function CardDetailPage() {
       setPrice({ usd: usd_price, inr: inr_price, aed: aed_price, lastFetched: last_fetched })
     }
     if (detailRes.status === 'fulfilled' && detailRes.value.ok) {
-      setDetail(await detailRes.value.json() as CardDetailResponse)
+      const detailData = await detailRes.value.json() as CardDetailResponse
+      setDetail(detailData)
+      if (detailData.price?.market != null) {
+        setPrice({
+          usd: detailData.price.market,
+          inr: detailData.price.inr,
+          aed: detailData.price.aed,
+          lastFetched: detailData.price.lastFetched,
+        })
+      }
     }
     setDetailLoading(false)
   }, [cardId])

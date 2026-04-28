@@ -196,13 +196,30 @@ export async function GET(request: NextRequest) {
     const d = json?.data
     const market = typeof d?.prices?.market === 'number' ? (d.prices.market as number) : null
     if (market != null) {
+      const fetchedAt = new Date().toISOString()
       price = {
         market,
         low: typeof d.prices.low === 'number' ? d.prices.low : null,
         inr: Math.round(market * USD_INR),
         aed: Math.round(market * USD_AED * 100) / 100,
-        lastFetched: new Date().toISOString(),
+        lastFetched: fetchedAt,
       }
+      await Promise.allSettled([
+        sb.from('card_prices').upsert(
+          {
+            card_id: cardId,
+            usd_price: market,
+            inr_price: price.inr,
+            aed_price: price.aed,
+            last_fetched: fetchedAt,
+          },
+          { onConflict: 'card_id' },
+        ),
+        sb.from('card_price_daily').upsert(
+          { card_id: cardId, price_date: fetchedAt.slice(0, 10), usd_price: market },
+          { onConflict: 'card_id,price_date' },
+        ),
+      ])
     }
     const variants = d?.prices?.variants as Record<string, Record<string, { price?: number }>> | undefined
     if (variants) {
@@ -238,7 +255,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Call 3: graded prices ─────────────────────────────────────────────────────
-  let grades: GradeEntry[] = []
+  const grades: GradeEntry[] = []
 
   if (psaRes?.ok) {
     const json = await psaRes.json().catch(() => null)

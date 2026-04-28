@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { useCountry } from '@/lib/context/CountryContext'
+import { POKWHO_AVATARS } from '@/lib/avatar-options'
 
 const CITIES: Record<string, string[]> = {
   IN: ['Mumbai', 'Delhi', 'Bengaluru', 'Pune', 'Hyderabad', 'Chennai', 'Kolkata', 'Ahmedabad', 'Jaipur', 'Other'],
@@ -27,7 +28,6 @@ export default function OnboardingPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [checking, setChecking] = useState(true)
-  const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,14 +39,13 @@ export default function OnboardingPage() {
   const [bio, setBio] = useState('')
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null)
 
   // on mount: verify auth, skip if profile exists
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.replace('/login'); return }
-
-      setUserId(user.id)
 
       const { data: existing } = await supabase
         .from('profiles')
@@ -77,6 +76,14 @@ export default function OnboardingPage() {
     if (!file) return
     setAvatarFile(file)
     setAvatarPreview(URL.createObjectURL(file))
+    setSelectedAvatarUrl(null)
+  }
+
+  function selectBuiltInAvatar(src: string) {
+    setSelectedAvatarUrl(src)
+    setAvatarFile(null)
+    setAvatarPreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -86,6 +93,7 @@ export default function OnboardingPage() {
     if (!username.trim()) { setError('Username is required.'); return }
     if (!country) { setError('Please select a country.'); return }
     if (!city) { setError('Please select a city.'); return }
+    if (!avatarFile && !selectedAvatarUrl) { setError('Choose an avatar or upload a profile photo.'); return }
 
     setLoading(true)
 
@@ -101,7 +109,7 @@ export default function OnboardingPage() {
 
       console.log('[onboarding] Auth uid at submit:', currentUser.id)
 
-      let avatarUrl: string | null = null
+      let avatarUrl: string | null = selectedAvatarUrl
 
       if (avatarFile) {
         const ext = avatarFile.name.split('.').pop()
@@ -295,18 +303,41 @@ export default function OnboardingPage() {
           {/* ── 5. Avatar upload ───────────────────────────────── */}
           <section>
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3">
-              Profile Photo{' '}
-              <span className="text-zinc-600 normal-case font-normal">(optional)</span>
+              Avatar
             </p>
+            <div className="grid grid-cols-4 gap-3 mb-4">
+              {POKWHO_AVATARS.map(avatar => (
+                <button
+                  key={avatar.id}
+                  type="button"
+                  onClick={() => selectBuiltInAvatar(avatar.src)}
+                  className={`aspect-square rounded-2xl border-2 overflow-hidden bg-zinc-900 transition-all ${
+                    selectedAvatarUrl === avatar.src
+                      ? 'border-yellow-400 shadow-lg shadow-yellow-400/20'
+                      : 'border-zinc-700 hover:border-zinc-500'
+                  }`}
+                  aria-label={`Choose ${avatar.label}`}
+                >
+                  <Image
+                    src={avatar.src}
+                    alt={avatar.label}
+                    width={80}
+                    height={80}
+                    className="w-full h-full object-cover"
+                    unoptimized
+                  />
+                </button>
+              ))}
+            </div>
             <div className="flex items-center gap-4">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="w-16 h-16 flex-shrink-0 rounded-full border-2 border-dashed border-zinc-700 hover:border-yellow-400 bg-zinc-900 flex items-center justify-center overflow-hidden transition-colors"
               >
-                {avatarPreview ? (
+                {(avatarPreview ?? selectedAvatarUrl) ? (
                   <Image
-                    src={avatarPreview}
+                    src={avatarPreview ?? selectedAvatarUrl!}
                     alt="Avatar preview"
                     width={64}
                     height={64}
@@ -322,9 +353,9 @@ export default function OnboardingPage() {
                   onClick={() => fileInputRef.current?.click()}
                   className="text-sm font-bold text-yellow-400 hover:text-yellow-300 transition-colors"
                 >
-                  {avatarPreview ? 'Change photo' : 'Upload photo'}
+                  {avatarPreview ? 'Change photo' : 'Upload custom photo'}
                 </button>
-                <p className="text-zinc-600 text-xs mt-0.5">JPG, PNG or WebP · max 5 MB</p>
+                <p className="text-zinc-600 text-xs mt-0.5">Pick a character or upload JPG, PNG, WebP</p>
               </div>
             </div>
             <input

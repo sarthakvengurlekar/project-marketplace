@@ -17,6 +17,8 @@ interface CardPrice {
   inr_price: number | null
   aed_price: number | null
   last_fetched: string | null
+  source?: string
+  reason?: string
 }
 
 interface CardData {
@@ -65,17 +67,87 @@ function needsPriceRefresh(price: CardPrice | undefined): boolean {
   return isStale(price.last_fetched)
 }
 
+function isFinitePrice(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function hasUsdPrice(price: CardPrice | undefined): price is CardPrice {
+  return isFinitePrice(price?.usd_price)
+}
+
+function priceFetchedTime(price: CardPrice | undefined): number {
+  if (!price?.last_fetched) return 0
+  const time = new Date(price.last_fetched).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+function mergeItemsWithCurrentPrices(
+  incomingItems: CollectionItem[],
+  currentItems: CollectionItem[],
+): CollectionItem[] {
+  const currentPriceByCardId = new Map<string, CardPrice>()
+
+  for (const item of currentItems) {
+    const price = item.cards.card_prices?.[0]
+    if (hasUsdPrice(price)) currentPriceByCardId.set(item.cards.id, price)
+  }
+
+  return incomingItems.map(item => {
+    const currentPrice = currentPriceByCardId.get(item.cards.id)
+    if (!currentPrice) return item
+
+    const incomingPrice = item.cards.card_prices?.[0]
+    if (hasUsdPrice(incomingPrice) && priceFetchedTime(incomingPrice) >= priceFetchedTime(currentPrice)) {
+      return item
+    }
+
+    return { ...item, cards: { ...item.cards, card_prices: [currentPrice] } }
+  })
+}
+
+function mergePriceUpdates(
+  items: CollectionItem[],
+  updates: { cid: string; price: CardPrice }[],
+): CollectionItem[] {
+  const updateMap = new Map(updates.map(update => [update.cid, update.price]))
+
+  return items.map(item => {
+    const price = updateMap.get(item.cards.id)
+    if (!price) return item
+    return { ...item, cards: { ...item.cards, card_prices: [price] } }
+  })
+}
+
 function getItemCurrentUsd(item: CollectionItem): number | null {
   const rawUsd = item.cards.card_prices?.[0]?.usd_price ?? null
   return getAdjustedUsdPrice(rawUsd, item.grading_company, item.grade)
 }
 
-function getItemDisplayUsd(item: CollectionItem): number | null {
-  return getItemCurrentUsd(item) ?? item.added_price_usd
+function roundLocalPrice(amount: number, countryCode: string): number {
+  return countryCode === 'UAE' ? Math.round(amount * 100) / 100 : Math.round(amount)
 }
 
-function getCollectionDisplayUsd(items: CollectionItem[]): number {
-  return items.reduce((sum, item) => sum + (getItemDisplayUsd(item) ?? 0), 0)
+function getItemCurrentLocal(item: CollectionItem, countryCode: string): number | null {
+  const priceData = item.cards.card_prices?.[0]
+  const marketUsd = getItemCurrentUsd(item)
+  if (marketUsd == null) return null
+
+  const rawUsd = priceData?.usd_price
+  const rawLocal = countryCode === 'UAE' ? priceData?.aed_price : priceData?.inr_price
+
+  if (isFinitePrice(rawLocal) && isFinitePrice(rawUsd) && rawUsd > 0) {
+    return roundLocalPrice(rawLocal * (marketUsd / rawUsd), countryCode)
+  }
+
+  return convertFromUSD(marketUsd, countryCode)
+}
+
+function getCollectionCurrentUsd(items: CollectionItem[]): number {
+  return items.reduce((sum, item) => sum + (getItemCurrentUsd(item) ?? 0), 0)
+}
+
+function getCollectionCurrentLocal(items: CollectionItem[], countryCode: string): number {
+  return items.reduce((sum, item) => sum + (getItemCurrentLocal(item, countryCode) ?? 0), 0)
 }
 
 function hasMissingMarketPrice(items: CollectionItem[]): boolean {
@@ -115,9 +187,9 @@ function CardTile({
   const condition  = item.condition ?? 'NM'
   const priceData  = item.cards.card_prices?.[0]
   const marketUsd  = getItemCurrentUsd(item)
-  const displayUsd = getItemDisplayUsd(item)
-  const localPrice = displayUsd != null ? convertFromUSD(displayUsd, countryCode) : null
+  const localPrice = getItemCurrentLocal(item, countryCode)
   const fetchedAt  = priceData?.last_fetched ?? null
+  const showPriceSkeleton = priceLoading && marketUsd == null
 
   const gainPct = (marketUsd != null && item.added_price_usd != null && item.added_price_usd > 0)
     ? ((marketUsd - item.added_price_usd) / item.added_price_usd) * 100
@@ -188,13 +260,17 @@ function CardTile({
         </div>
 
         {/* Price */}
-        {priceLoading ? (
-          <div className="h-3.5 w-3/4 rounded animate-pulse mt-1" style={{ background: '#e0dbd0' }} />
-        ) : displayUsd != null ? (
+        <div className="space-y-1" style={{ minHeight: 34 }}>
+        {showPriceSkeleton ? (
+          <>
+            <div className="h-3.5 w-3/4 rounded animate-pulse mt-1" style={{ background: '#e0dbd0' }} />
+            <p className="text-[10px]" style={{ color: '#8B7866' }}>Checking price</p>
+          </>
+        ) : marketUsd != null ? (
           <>
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="font-black text-xs" style={{ color: '#E8233B' }}>
-                {formatPrice(localPrice ?? convertFromUSD(displayUsd, countryCode), countryCode)}
+                {formatPrice(localPrice ?? convertFromUSD(marketUsd, countryCode), countryCode)}
               </p>
               {isOwner && gainPct != null && (
                 <span
@@ -208,15 +284,14 @@ function CardTile({
                 </span>
               )}
             </div>
-            {marketUsd == null ? (
-              <p className="text-[10px]" style={{ color: '#8B7866' }}>Live price pending</p>
-            ) : fetchedAt && (
+            {fetchedAt && (
               <p className="text-[10px]" style={{ color: '#8B7866' }}>Updated {timeAgo(fetchedAt)}</p>
             )}
           </>
         ) : (
           <p className="text-[10px]" style={{ color: '#8B7866' }}>Price unavailable</p>
         )}
+        </div>
       </div>
     </Link>
   )
@@ -241,13 +316,19 @@ export default function BinderView({
   const [scanOpen, setScanOpen] = useState(false)
   const [sevenDayChange, setSevenDayChange] = useState<number | null>(null)
   const refreshed     = useRef<Set<string>>(new Set())
+  const refreshing    = useRef<Set<string>>(new Set())
+  const itemsRef      = useRef<CollectionItem[]>([])
   const snapshotSaved = useRef(false)
+
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
 
   const saveSnapshotAndComputeChange = useCallback(async (latestItems: CollectionItem[]) => {
     if (!isOwner || snapshotSaved.current) return
 
-    const totalUsd = getCollectionDisplayUsd(latestItems)
-    const hasAnyPrice = latestItems.some(item => getItemDisplayUsd(item) != null)
+    const totalUsd = getCollectionCurrentUsd(latestItems)
+    const hasAnyPrice = latestItems.some(item => getItemCurrentUsd(item) != null)
     const missingMarketPrice = hasMissingMarketPrice(latestItems)
 
     if (latestItems.length > 0 && (!hasAnyPrice || totalUsd <= 0)) return
@@ -270,18 +351,20 @@ export default function BinderView({
     const { snapshots } = await res.json() as { snapshots: { snapshot_date: string; value_usd: number }[] }
 
     if (snapshots.length <= 1) {
-      const baseDate = new Date()
-      baseDate.setDate(baseDate.getDate() - 7)
-      await fetch('/api/snapshot-value', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value_usd: totalUsd, snapshot_date: baseDate.toISOString().slice(0, 10) }),
-      })
-      setSevenDayChange(0)
+      setSevenDayChange(null)
       return
     }
 
-    const oldest = snapshots[0].value_usd
+    const targetDate = new Date()
+    targetDate.setDate(targetDate.getDate() - 7)
+    const targetDateKey = targetDate.toISOString().slice(0, 10)
+    const baseline = [...snapshots].reverse().find(snapshot => snapshot.snapshot_date <= targetDateKey)
+    if (!baseline) {
+      setSevenDayChange(null)
+      return
+    }
+
+    const oldest = baseline.value_usd
     const newest = snapshots[snapshots.length - 1].value_usd
     setSevenDayChange(oldest > 0 ? ((newest - oldest) / oldest) * 100 : 0)
   }, [isOwner])
@@ -304,23 +387,29 @@ export default function BinderView({
     if (error) { setLoading(false); return }
     if (!data)  { setLoading(false); return }
 
-    const typed = data as unknown as CollectionItem[]
+    const typed = mergeItemsWithCurrentPrices(data as unknown as CollectionItem[], itemsRef.current)
+    itemsRef.current = typed
     setItems(typed)
     setLoading(false)
 
     const toRefresh = typed
-      .filter(item => needsPriceRefresh(item.cards.card_prices?.[0]))
+      .filter(item => isOwner || needsPriceRefresh(item.cards.card_prices?.[0]))
       .filter(item => !refreshed.current.has(item.cards.id))
+      .filter(item => !refreshing.current.has(item.cards.id))
 
     if (toRefresh.length === 0) {
       void saveSnapshotAndComputeChange(typed)
       return
     }
 
-    const newIds = toRefresh.map(i => i.cards.id)
-    setPriceLoadingIds(prev => new Set(Array.from(prev).concat(newIds)))
+    const missingPriceIds = toRefresh
+      .filter(item => getItemCurrentUsd(item) == null)
+      .map(item => item.cards.id)
+    if (missingPriceIds.length > 0) {
+      setPriceLoadingIds(prev => new Set(Array.from(prev).concat(missingPriceIds)))
+    }
 
-    const BATCH = 3
+    const BATCH = isOwner ? 1 : 3
     let latestItems = typed
 
     for (let i = 0; i < toRefresh.length; i += BATCH) {
@@ -329,7 +418,8 @@ export default function BinderView({
         batch.map(async (item) => {
           const cid = item.cards.id
           if (refreshed.current.has(cid)) return null
-          refreshed.current.add(cid)
+          if (refreshing.current.has(cid)) return null
+          refreshing.current.add(cid)
 
           const controller = new AbortController()
           const timeoutId = setTimeout(() => controller.abort(), 15_000)
@@ -338,19 +428,23 @@ export default function BinderView({
             const res = await fetch(`/api/refresh-price?card_id=${encodeURIComponent(cid)}`, { signal: controller.signal })
             clearTimeout(timeoutId)
             if (!res.ok) return null
-            const { usd_price, inr_price, aed_price, last_fetched } = await res.json()
+            const { usd_price, inr_price, aed_price, last_fetched, source, reason } = await res.json()
+            refreshed.current.add(cid)
             if (usd_price == null && item.cards.card_prices?.[0]?.usd_price != null) return null
-            return { cid, price: { usd_price, inr_price, aed_price, last_fetched } as CardPrice }
+            return { cid, price: { usd_price, inr_price, aed_price, last_fetched, source, reason } as CardPrice }
           } catch {
             // AbortError or network error — finally handles cleanup
             return null
           } finally {
             clearTimeout(timeoutId)
-            setPriceLoadingIds(prev => {
-              const next = new Set(prev)
-              next.delete(cid)
-              return next
-            })
+            refreshing.current.delete(cid)
+            if (missingPriceIds.includes(cid)) {
+              setPriceLoadingIds(prev => {
+                const next = new Set(prev)
+                next.delete(cid)
+                return next
+              })
+            }
           }
         })
       )
@@ -362,20 +456,16 @@ export default function BinderView({
         .map(result => result.value)
 
       if (updates.length > 0) {
-        const updateMap = new Map(updates.map(update => [update.cid, update.price]))
-        latestItems = latestItems.map(item => {
-          const price = updateMap.get(item.cards.id)
-          if (!price) return item
-          return { ...item, cards: { ...item.cards, card_prices: [price] } }
-        })
+        latestItems = mergePriceUpdates(itemsRef.current.length > 0 ? itemsRef.current : latestItems, updates)
+        itemsRef.current = latestItems
         setItems(latestItems)
       }
 
-      if (i + BATCH < toRefresh.length) await new Promise(r => setTimeout(r, 1000))
+      if (i + BATCH < toRefresh.length) await new Promise(r => setTimeout(r, isOwner ? 900 : 1000))
     }
 
     void saveSnapshotAndComputeChange(latestItems)
-  }, [profileUserId, saveSnapshotAndComputeChange])
+  }, [profileUserId, isOwner, saveSnapshotAndComputeChange])
 
   useEffect(() => { fetchCollection() }, [fetchCollection])
 
@@ -385,13 +475,16 @@ export default function BinderView({
       .delete()
       .eq('id', userCardId)
       .eq('user_id', profileUserId)
-    if (!error) setItems(prev => prev.filter(i => i.id !== userCardId))
+    if (!error) {
+      setItems(prev => {
+        const next = prev.filter(i => i.id !== userCardId)
+        itemsRef.current = next
+        return next
+      })
+    }
   }
 
-  const totalLocal = items.reduce((sum, item) => {
-    const displayUsd = getItemDisplayUsd(item)
-    return sum + convertFromUSD(displayUsd ?? 0, countryCode)
-  }, 0)
+  const totalLocal = getCollectionCurrentLocal(items, countryCode)
 
   // All-time gain: compare current USD value vs added_price_usd for cards that have both
   const { currentUsd: gainCurrentUsd, addedUsd: gainAddedUsd } = items.reduce(

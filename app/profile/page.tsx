@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useCountry } from '@/lib/context/CountryContext'
 import { convertINRToLocal, formatPrice, COUNTRIES } from '@/lib/currency'
+import { POKWHO_AVATARS } from '@/lib/avatar-options'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -668,6 +669,9 @@ function EditProfileModal({
   const [city,          setCity]          = useState(profile.city ?? '')
   const [avatarFile,    setAvatarFile]    = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(
+    POKWHO_AVATARS.some(avatar => avatar.src === profile.avatar_url) ? profile.avatar_url : null
+  )
   const [saving,        setSaving]        = useState(false)
   const [error,         setError]         = useState<string | null>(null)
 
@@ -681,6 +685,14 @@ function EditProfileModal({
     if (!file) return
     setAvatarFile(file)
     setAvatarPreview(URL.createObjectURL(file))
+    setSelectedAvatarUrl(null)
+  }
+
+  function selectBuiltInAvatar(src: string) {
+    setSelectedAvatarUrl(src)
+    setAvatarFile(null)
+    setAvatarPreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   async function handleSave() {
@@ -690,7 +702,7 @@ function EditProfileModal({
     setError(null)
 
     try {
-      let avatarUrl = profile.avatar_url
+      let avatarUrl = selectedAvatarUrl ?? profile.avatar_url
 
       if (avatarFile) {
         const ext  = avatarFile.name.split('.').pop()
@@ -756,8 +768,8 @@ function EditProfileModal({
               onClick={() => fileInputRef.current?.click()}
               style={{ position: 'relative', width: 72, height: 72, border: '2px solid #0A0A0A', boxShadow: '2px 2px 0 #0A0A0A', overflow: 'hidden', cursor: 'pointer', background: '#F4D03F' }}
             >
-              {(avatarPreview ?? profile.avatar_url) ? (
-                <Image src={avatarPreview ?? profile.avatar_url!} alt="Avatar" fill className="object-cover" unoptimized />
+              {(avatarPreview ?? selectedAvatarUrl ?? profile.avatar_url) ? (
+                <Image src={avatarPreview ?? selectedAvatarUrl ?? profile.avatar_url!} alt="Avatar" fill className="object-cover" unoptimized />
               ) : (
                 <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 900 }}>
                   {profile.username[0]?.toUpperCase()}
@@ -768,6 +780,31 @@ function EditProfileModal({
               </div>
             </button>
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Choose Avatar</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              {POKWHO_AVATARS.map(avatar => (
+                <button
+                  key={avatar.id}
+                  type="button"
+                  onClick={() => selectBuiltInAvatar(avatar.src)}
+                  style={{
+                    aspectRatio: '1 / 1',
+                    border: selectedAvatarUrl === avatar.src ? '3px solid #E8233B' : '2px solid #0A0A0A',
+                    boxShadow: selectedAvatarUrl === avatar.src ? '3px 3px 0 #0A0A0A' : 'none',
+                    background: '#F4D03F',
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                  aria-label={`Choose ${avatar.label}`}
+                >
+                  <Image src={avatar.src} alt={avatar.label} width={80} height={80} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Username */}
