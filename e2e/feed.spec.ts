@@ -46,16 +46,9 @@ test.describe('feed', () => {
   })
 
   test('seller card shows username', async ({ page }) => {
-    const sellerCard = page.locator('img[alt*="avatar"], img[alt*="user"]').first()
-    const hasSellerCards = await sellerCard.count() > 0
-
-    if (hasSellerCards) {
-      // Username should appear somewhere on the page
-      await expect(page.locator('h2, h3, p').filter({ hasText: /@|^[a-z0-9_]+$/i }).first())
-        .toBeVisible({ timeout: 8000 })
-    } else {
-      test.skip() // No sellers in test account's feed
-    }
+    const sellerCard = page.getByTestId('seller-card').first()
+    await expect(sellerCard).toBeVisible({ timeout: 10000 })
+    await expect(sellerCard).toContainText(/@/)
   })
 
   test('search input filters by card name', async ({ page }) => {
@@ -87,11 +80,7 @@ test.describe('feed', () => {
 
   test('view full collection opens seller binder', async ({ page }) => {
     const sellerCard = page.getByTestId('seller-card').first()
-    if (await sellerCard.count() === 0) {
-      test.skip()
-      return
-    }
-
+    await expect(sellerCard).toBeVisible({ timeout: 10000 })
     await page.getByRole('link', { name: /view full collection/i }).first().click()
     await expect(page).toHaveURL(/\/binder\/[^/]+$/, { timeout: 8000 })
   })

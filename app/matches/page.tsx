@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -511,7 +511,7 @@ function PlayerResultItem({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function MatchesPage() {
+function MatchesPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [matches,   setMatches]   = useState<MatchRow[]>([])
@@ -880,5 +880,40 @@ export default function MatchesPage() {
       </div>
       <style>{`@keyframes tradeSearchSpin { to { transform: rotate(360deg); } }`}</style>
     </main>
+  )
+}
+
+function MatchesPageFallback() {
+  return (
+    <main className="min-h-screen pb-28" style={{ background: '#FAF6EC' }}>
+      <div className="max-w-lg mx-auto px-4 pt-4">
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => (
+            <div
+              key={i}
+              className="animate-pulse p-4"
+              style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A' }}
+            >
+              <div className="flex gap-3 items-start">
+                <div style={{ width: 44, height: 44, background: '#e8e2d4', border: '2px solid #0A0A0A', flexShrink: 0 }} />
+                <div className="flex-1 space-y-2 pt-1">
+                  <div style={{ background: '#e8e2d4', height: 12, width: '60%', borderRadius: 2 }} />
+                  <div style={{ background: '#e8e2d4', height: 10, width: '40%', borderRadius: 2 }} />
+                  <div style={{ background: '#e8e2d4', height: 10, width: '80%', borderRadius: 2 }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </main>
+  )
+}
+
+export default function MatchesPage() {
+  return (
+    <Suspense fallback={<MatchesPageFallback />}>
+      <MatchesPageContent />
+    </Suspense>
   )
 }

@@ -90,19 +90,12 @@ test.describe('add cards — search', () => {
 
   test('set filters are visible', async ({ page }) => {
     const chips = page.getByTestId('set-filter-chip')
-    if (await chips.count() === 0) {
-      test.skip()
-      return
-    }
-    await expect(chips.first()).toBeVisible()
+    await expect(chips.first()).toBeVisible({ timeout: 10000 })
   })
 
   test('set filter can be selected', async ({ page }) => {
     const chips = page.getByTestId('set-filter-chip')
-    if (await chips.count() === 0) {
-      test.skip()
-      return
-    }
+    await expect(chips.first()).toBeVisible({ timeout: 10000 })
     await chips.first().click()
     await expect(page.getByPlaceholder(/searching cards in/i)).toBeVisible()
   })

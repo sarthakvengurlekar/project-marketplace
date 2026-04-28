@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -12,6 +12,11 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error,           setError]           = useState<string | null>(null)
   const [loading,         setLoading]         = useState(false)
+  const [hydrated,        setHydrated]        = useState(false)
+
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
@@ -130,19 +135,19 @@ export default function SignupPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !hydrated}
               style={{
                 width:         '100%',
                 padding:       '13px 0',
-                background:    loading ? '#E8233B99' : '#E8233B',
+                background:    loading || !hydrated ? '#E8233B99' : '#E8233B',
                 border:        '2px solid #0A0A0A',
-                boxShadow:     loading ? 'none' : '4px 4px 0 #0A0A0A',
+                boxShadow:     loading || !hydrated ? 'none' : '4px 4px 0 #0A0A0A',
                 color:         '#FAF6EC',
                 fontWeight:    900,
                 fontSize:      14,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                cursor:        loading ? 'not-allowed' : 'pointer',
+                cursor:        loading || !hydrated ? 'not-allowed' : 'pointer',
                 marginTop:     4,
               }}
             >

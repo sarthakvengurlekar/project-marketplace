@@ -86,7 +86,7 @@ test.describe('match detail / chat', () => {
       .or(page.getByText(/chatbox/i).first())
     await chatboxTab.click()
 
-    const matchLink = page.locator('a[href*="/matches/"]').first()
+    const matchLink = page.getByTestId('match-list-item').first()
     const hasMatches = await matchLink.count() > 0
 
     if (!hasMatches) {

@@ -8,6 +8,13 @@ export default defineConfig({
   workers: 1,
   reporter: [['html', { open: 'never' }], ['list']],
 
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:3000/login',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
+
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',

@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 
 // Prereq: ALTER TABLE public.cards ADD COLUMN IF NOT EXISTS tcgplayer_id text;
 
+export const dynamic = 'force-dynamic'
+
 const PPT_BASE = 'https://www.pokemonpricetracker.com/api/v2'
 
 function delay(ms: number) {

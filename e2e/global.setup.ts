@@ -1,6 +1,7 @@
-import { test as setup } from '@playwright/test'
+import { expect, type Locator, type Page, test as setup } from '@playwright/test'
 import fs from 'fs'
 import path from 'path'
+import { seedE2eData } from './seed'
 
 const AUTH_FILE = path.join(__dirname, '.auth/user.json')
 
@@ -31,17 +32,16 @@ setup('authenticate', async ({ page }) => {
     )
   }
 
-  await page.goto('/login')
-  const emailInput = page.getByPlaceholder('you@example.com')
-  const passwordInput = page.getByPlaceholder('••••••••')
-  const signInButton = page.getByRole('button', { name: /sign in/i })
+  await seedE2eData(email)
+
+  const { emailInput, passwordInput, signInButton } = await openReadyLoginPage(page, browserErrors)
 
   const loginError = page.getByTestId('login-error')
 
   await emailInput.fill(email)
   await expectSoftValue(emailInput, email)
   await passwordInput.fill(password)
-  await passwordInput.press('Enter')
+  await signInButton.click()
 
   // Wait for redirect away from /login — confirms auth succeeded.
   // If Supabase rejects the login, fail with the visible login message instead.
@@ -69,6 +69,47 @@ setup('authenticate', async ({ page }) => {
 
   await page.context().storageState({ path: AUTH_FILE })
 })
+
+async function openReadyLoginPage(page: Page, browserErrors: string[]): Promise<{
+  emailInput: Locator
+  passwordInput: Locator
+  signInButton: Locator
+}> {
+  let lastBody = ''
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await page.goto('/login', { waitUntil: 'domcontentloaded' })
+
+    const serverError = page.getByRole('heading', { name: /server error/i })
+    if (await serverError.isVisible().catch(() => false)) {
+      throw new Error(`Next dev server rendered an error page: ${await page.locator('body').innerText()}`)
+    }
+
+    const emailInput = page.locator('input[type="email"]').first()
+    const passwordInput = page.locator('input[type="password"]').first()
+    const signInButton = page.getByRole('button', { name: /sign in/i })
+
+    await emailInput.waitFor({ state: 'visible', timeout: 15_000 })
+
+    await signInButton.waitFor({ state: 'visible', timeout: 5_000 })
+    const hydrated = await expect(signInButton)
+      .toBeEnabled({ timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false)
+
+    if (hydrated) return { emailInput, passwordInput, signInButton }
+
+    lastBody = await page.locator('body').innerText().catch(() => '')
+    await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {})
+  }
+
+  throw new Error([
+    'Login page rendered but did not hydrate after 3 attempts.',
+    'The Sign In button stayed disabled, so the browser never attached the React login handler.',
+    lastBody ? `Last page text: ${lastBody}` : 'Last page text: unavailable',
+    browserErrors.length ? `Browser errors: ${browserErrors.join(' | ')}` : 'Browser errors: none captured',
+  ].join('\n'))
+}
 
 async function expectSoftValue(locator: { inputValue: () => Promise<string> }, expected: string) {
   const actual = await locator.inputValue()

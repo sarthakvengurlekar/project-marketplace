@@ -21,6 +21,7 @@ test.describe('unauthenticated', () => {
 
   test('shows error on invalid credentials', async ({ page }) => {
     await page.goto('/login')
+    await expect(page.getByRole('button', { name: /sign in/i })).toBeEnabled({ timeout: 15000 })
     await page.getByPlaceholder('you@example.com').fill('notareal@user.com')
     await page.getByPlaceholder('••••••••').fill('wrongpassword')
     await page.getByRole('button', { name: /sign in/i }).click()
@@ -36,6 +37,7 @@ test.describe('unauthenticated', () => {
 
   test('signup validates password mismatch', async ({ page }) => {
     await page.goto('/signup')
+    await expect(page.getByRole('button', { name: /create account/i })).toBeEnabled({ timeout: 15000 })
     await page.getByPlaceholder('you@example.com').fill('test@example.com')
     // Fill both password fields — find them by type since placeholders match "••••••••"
     const pwFields = page.locator('input[type="password"]')
@@ -47,6 +49,7 @@ test.describe('unauthenticated', () => {
 
   test('signup validates password too short', async ({ page }) => {
     await page.goto('/signup')
+    await expect(page.getByRole('button', { name: /create account/i })).toBeEnabled({ timeout: 15000 })
     await page.getByPlaceholder('you@example.com').fill('test@example.com')
     const pwFields = page.locator('input[type="password"]')
     await pwFields.nth(0).fill('abc')

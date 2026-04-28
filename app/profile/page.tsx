@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -1064,7 +1064,7 @@ function ProfileSkeleton() {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function ProfilePage() {
+function ProfilePageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { setCountryCode } = useCountry()
@@ -1456,5 +1456,13 @@ export default function ProfilePage() {
         <BadgeUnlockModal unlock={badgeUnlock} onClose={closeBadgeUnlock} />
       )}
     </main>
+  )
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#FAF6EC' }}><ProfileSkeleton /></div>}>
+      <ProfilePageContent />
+    </Suspense>
   )
 }
