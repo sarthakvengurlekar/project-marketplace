@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const PPT_BASE = 'https://www.pokemonpricetracker.com/api/v2'
-
 // Known recent sets in reverse chronological order (newest first)
 const FALLBACK_SETS = [
   { name: 'Mega Evolution—Perfect Order',     releaseDate: '2026-03-27', code: 'mev04' },

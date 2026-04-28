@@ -49,6 +49,7 @@ interface CollectionItem {
 const CONDITION_LABEL: Record<string, string> = {
   NM: 'NM', LP: 'LP', MP: 'MP', HP: 'HP',
 }
+const PRICE_STALE_MS = 15 * 60_000
 
 function timeAgo(iso: string): string {
   const h = Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000)
@@ -57,14 +58,16 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d ago`
 }
 
-function isStale(fetchedAt: string | null): boolean {
+function isStale(fetchedAt: string | null, staleMs = PRICE_STALE_MS): boolean {
   if (!fetchedAt) return true
-  return Date.now() - new Date(fetchedAt).getTime() > 86_400_000
+  const fetchedTime = new Date(fetchedAt).getTime()
+  if (!Number.isFinite(fetchedTime)) return true
+  return Date.now() - fetchedTime > staleMs
 }
 
-function needsPriceRefresh(price: CardPrice | undefined): boolean {
+function needsPriceRefresh(price: CardPrice | undefined, staleMs = PRICE_STALE_MS): boolean {
   if (!price || price.usd_price == null) return true
-  return isStale(price.last_fetched)
+  return isStale(price.last_fetched, staleMs)
 }
 
 function isFinitePrice(value: number | null | undefined): value is number {
@@ -142,16 +145,8 @@ function getItemCurrentLocal(item: CollectionItem, countryCode: string): number 
   return convertFromUSD(marketUsd, countryCode)
 }
 
-function getCollectionCurrentUsd(items: CollectionItem[]): number {
-  return items.reduce((sum, item) => sum + (getItemCurrentUsd(item) ?? 0), 0)
-}
-
 function getCollectionCurrentLocal(items: CollectionItem[], countryCode: string): number {
   return items.reduce((sum, item) => sum + (getItemCurrentLocal(item, countryCode) ?? 0), 0)
-}
-
-function hasMissingMarketPrice(items: CollectionItem[]): boolean {
-  return items.some(item => getItemCurrentUsd(item) == null)
 }
 
 // ─── Skeleton tile ────────────────────────────────────────────────────────────
@@ -314,60 +309,66 @@ export default function BinderView({
   const [loading, setLoading] = useState(true)
   const [priceLoadingIds, setPriceLoadingIds] = useState<Set<string>>(new Set())
   const [scanOpen, setScanOpen] = useState(false)
-  const [sevenDayChange, setSevenDayChange] = useState<number | null>(null)
   const refreshed     = useRef<Set<string>>(new Set())
   const refreshing    = useRef<Set<string>>(new Set())
+  const baselineBackfilled = useRef<Set<string>>(new Set())
+  const baselineBackfilling = useRef<Set<string>>(new Set())
   const itemsRef      = useRef<CollectionItem[]>([])
-  const snapshotSaved = useRef(false)
 
   useEffect(() => {
     itemsRef.current = items
   }, [items])
 
-  const saveSnapshotAndComputeChange = useCallback(async (latestItems: CollectionItem[]) => {
-    if (!isOwner || snapshotSaved.current) return
+  const backfillMissingAddedPriceBaselines = useCallback(async (latestItems: CollectionItem[]) => {
+    if (!isOwner) return latestItems
 
-    const totalUsd = getCollectionCurrentUsd(latestItems)
-    const hasAnyPrice = latestItems.some(item => getItemCurrentUsd(item) != null)
-    const missingMarketPrice = hasMissingMarketPrice(latestItems)
+    const missingBaselines = latestItems
+      .map(item => ({ item, baselineUsd: getItemCurrentUsd(item) }))
+      .filter(({ item, baselineUsd }) => (
+        baselineUsd != null &&
+        baselineUsd > 0 &&
+        (item.added_price_usd == null || item.added_price_usd <= 0) &&
+        !baselineBackfilled.current.has(item.id) &&
+        !baselineBackfilling.current.has(item.id)
+      ))
 
-    if (latestItems.length > 0 && (!hasAnyPrice || totalUsd <= 0)) return
-    if (missingMarketPrice) {
-      setSevenDayChange(null)
-      return
-    }
+    if (missingBaselines.length === 0) return latestItems
 
-    snapshotSaved.current = true
+    missingBaselines.forEach(({ item }) => baselineBackfilling.current.add(item.id))
 
-    await fetch('/api/snapshot-value', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value_usd: totalUsd }),
+    const results = await Promise.allSettled(
+      missingBaselines.map(async ({ item, baselineUsd }) => {
+        const { error } = await supabase
+          .from('user_cards')
+          .update({ added_price_usd: baselineUsd })
+          .eq('id', item.id)
+          .eq('user_id', profileUserId)
+
+        if (error) throw error
+        return { userCardId: item.id, baselineUsd }
+      })
+    )
+
+    missingBaselines.forEach(({ item }) => baselineBackfilling.current.delete(item.id))
+
+    const updates = results
+      .filter((result): result is PromiseFulfilledResult<{ userCardId: string; baselineUsd: number }> => result.status === 'fulfilled')
+      .map(result => result.value)
+
+    updates.forEach(update => baselineBackfilled.current.add(update.userCardId))
+
+    if (updates.length === 0) return latestItems
+
+    const baselineByUserCardId = new Map(updates.map(update => [update.userCardId, update.baselineUsd]))
+    const nextItems = latestItems.map(item => {
+      const baseline = baselineByUserCardId.get(item.id)
+      return baseline != null ? { ...item, added_price_usd: baseline } : item
     })
 
-    const res = await fetch('/api/snapshot-value')
-    if (!res.ok) return
-
-    const { snapshots } = await res.json() as { snapshots: { snapshot_date: string; value_usd: number }[] }
-
-    if (snapshots.length <= 1) {
-      setSevenDayChange(null)
-      return
-    }
-
-    const targetDate = new Date()
-    targetDate.setDate(targetDate.getDate() - 7)
-    const targetDateKey = targetDate.toISOString().slice(0, 10)
-    const baseline = [...snapshots].reverse().find(snapshot => snapshot.snapshot_date <= targetDateKey)
-    if (!baseline) {
-      setSevenDayChange(null)
-      return
-    }
-
-    const oldest = baseline.value_usd
-    const newest = snapshots[snapshots.length - 1].value_usd
-    setSevenDayChange(oldest > 0 ? ((newest - oldest) / oldest) * 100 : 0)
-  }, [isOwner])
+    itemsRef.current = nextItems
+    setItems(nextItems)
+    return nextItems
+  }, [isOwner, profileUserId])
 
   const fetchCollection = useCallback(async () => {
     const { data, error } = await supabase
@@ -393,12 +394,20 @@ export default function BinderView({
     setLoading(false)
 
     const toRefresh = typed
-      .filter(item => isOwner || needsPriceRefresh(item.cards.card_prices?.[0]))
+      .filter(item => needsPriceRefresh(item.cards.card_prices?.[0], PRICE_STALE_MS))
       .filter(item => !refreshed.current.has(item.cards.id))
       .filter(item => !refreshing.current.has(item.cards.id))
+      .sort((a, b) => {
+        const aPrice = a.cards.card_prices?.[0]
+        const bPrice = b.cards.card_prices?.[0]
+        const aMissing = getItemCurrentUsd(a) == null
+        const bMissing = getItemCurrentUsd(b) == null
+        if (aMissing !== bMissing) return aMissing ? -1 : 1
+        return priceFetchedTime(aPrice) - priceFetchedTime(bPrice)
+      })
 
     if (toRefresh.length === 0) {
-      void saveSnapshotAndComputeChange(typed)
+      await backfillMissingAddedPriceBaselines(typed)
       return
     }
 
@@ -409,7 +418,7 @@ export default function BinderView({
       setPriceLoadingIds(prev => new Set(Array.from(prev).concat(missingPriceIds)))
     }
 
-    const BATCH = isOwner ? 1 : 3
+    const BATCH = isOwner ? 2 : 3
     let latestItems = typed
 
     for (let i = 0; i < toRefresh.length; i += BATCH) {
@@ -461,11 +470,11 @@ export default function BinderView({
         setItems(latestItems)
       }
 
-      if (i + BATCH < toRefresh.length) await new Promise(r => setTimeout(r, isOwner ? 900 : 1000))
+      if (i + BATCH < toRefresh.length) await new Promise(r => setTimeout(r, isOwner ? 700 : 1000))
     }
 
-    void saveSnapshotAndComputeChange(latestItems)
-  }, [profileUserId, isOwner, saveSnapshotAndComputeChange])
+    await backfillMissingAddedPriceBaselines(latestItems)
+  }, [profileUserId, isOwner, backfillMissingAddedPriceBaselines])
 
   useEffect(() => { fetchCollection() }, [fetchCollection])
 
@@ -504,7 +513,6 @@ export default function BinderView({
     : null
 
   const pricesUpdating = priceLoadingIds.size > 0
-  const missingMarketPrice = hasMissingMarketPrice(items)
 
   return (
     <main className="min-h-screen px-4 py-6 pb-28" style={{ background: '#FAF6EC' }}>
@@ -548,7 +556,13 @@ export default function BinderView({
             className="rounded-xl mb-5 overflow-hidden"
             style={{ border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
           >
-            <div className={`grid grid-cols-${isOwner ? 4 : 2}`} style={{ borderBottom: '2px solid #0A0A0A' }}>
+            <div
+              className="grid"
+              style={{
+                borderBottom: '2px solid #0A0A0A',
+                gridTemplateColumns: `repeat(${isOwner ? 3 : 2}, minmax(0, 1fr))`,
+              }}
+            >
               {[
                 {
                   label: 'CARDS',
@@ -562,14 +576,6 @@ export default function BinderView({
                   updating: pricesUpdating,
                 },
                 ...(isOwner ? [
-                  {
-                    label: '7D',
-                    value: !pricesUpdating && !missingMarketPrice && sevenDayChange != null
-                      ? `${sevenDayChange >= 0 ? '+' : ''}${sevenDayChange.toFixed(1)}%`
-                      : '—',
-                    color: pricesUpdating || missingMarketPrice || sevenDayChange == null ? '#8B7866'
-                      : sevenDayChange >= 0 ? '#16a34a' : '#dc2626',
-                  },
                   {
                     label: 'GAIN',
                     value: allTimeGainPct != null
