@@ -2,41 +2,48 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
-export default function LoginPage() {
+export default function ResetPasswordPage() {
   const router = useRouter()
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
-  const [error,    setError]    = useState<string | null>(null)
-  const [loading,  setLoading]  = useState(false)
+  const [password,        setPassword]        = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error,           setError]           = useState<string | null>(null)
+  const [loading,         setLoading]         = useState(false)
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-
-    if (error) {
-      setError(error.message)
-      setLoading(false)
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.')
       return
     }
 
-    router.push('/feed')
+    setLoading(true)
+    const { error } = await supabase.auth.updateUser({ password })
+    setLoading(false)
+
+    if (error) {
+      setError(error.message)
+    } else {
+      router.push('/feed')
+    }
   }
 
   const inputStyle: React.CSSProperties = {
-    width:       '100%',
-    boxSizing:   'border-box',
-    background:  '#FAF6EC',
-    border:      '2px solid #0A0A0A',
-    color:       '#0A0A0A',
-    fontSize:    14,
-    padding:     '12px 14px',
-    outline:     'none',
+    width:      '100%',
+    boxSizing:  'border-box',
+    background: '#FAF6EC',
+    border:     '2px solid #0A0A0A',
+    color:      '#0A0A0A',
+    fontSize:   14,
+    padding:    '12px 14px',
+    outline:    'none',
   }
 
   return (
@@ -61,30 +68,16 @@ export default function LoginPage() {
           <h1 style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 24, margin: '0 0 6px', letterSpacing: '-0.02em' }}>
             projecttrading
           </h1>
-          <p style={{ color: '#8B7866', fontSize: 13, margin: 0 }}>Sign in to your account</p>
+          <p style={{ color: '#8B7866', fontSize: 13, margin: 0 }}>Choose a new password</p>
         </div>
 
         {/* Form card */}
         <div style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '5px 5px 0 #0A0A0A', padding: '24px' }}>
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
             <div>
               <label style={{ display: 'block', color: '#0A0A0A', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                placeholder="you@example.com"
-                style={inputStyle}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', color: '#0A0A0A', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-                Password
+                New Password
               </label>
               <input
                 type="password"
@@ -96,17 +89,25 @@ export default function LoginPage() {
               />
             </div>
 
+            <div>
+              <label style={{ display: 'block', color: '#0A0A0A', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                style={inputStyle}
+              />
+            </div>
+
             {error && (
               <div style={{ background: 'rgba(232,35,59,0.06)', border: '2px solid #E8233B', padding: '10px 14px', color: '#E8233B', fontSize: 13, fontWeight: 700 }}>
                 {error}
               </div>
             )}
-
-            <p style={{ textAlign: 'right', margin: '-8px 0 0', fontSize: 12 }}>
-              <Link href="/forgot-password" style={{ color: '#8B7866', textDecoration: 'none', fontWeight: 700 }}>
-                Forgot password?
-              </Link>
-            </p>
 
             <button
               type="submit"
@@ -126,16 +127,9 @@ export default function LoginPage() {
                 marginTop:     4,
               }}
             >
-              {loading ? 'Signing in…' : 'Sign In'}
+              {loading ? 'Saving…' : 'Set New Password'}
             </button>
           </form>
-
-          <p style={{ marginTop: 20, textAlign: 'center', fontSize: 13, color: '#8B7866' }}>
-            Don&apos;t have an account?{' '}
-            <Link href="/signup" style={{ color: '#E8233B', fontWeight: 800, textDecoration: 'none' }}>
-              Sign up
-            </Link>
-          </p>
         </div>
 
         {/* Bottom accent */}

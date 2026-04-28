@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_PATHS    = ['/login', '/signup']          // no auth needed
+const PUBLIC_PATHS    = ['/login', '/signup', '/forgot-password', '/reset-password']  // no auth needed
 const AUTH_ONLY_PATHS = ['/onboarding']                // auth required, profile not required
 
 export async function middleware(request: NextRequest) {
