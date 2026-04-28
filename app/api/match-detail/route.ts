@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
   // Step 2: fetch other user profile
   const { data: otherUser, error: profileError } = await adminSupabase
     .from('profiles')
-    .select('id, username, avatar_url, city, country_code')
+    .select('id, username, avatar_url, city, country_code, trade_rating')
     .eq('id', otherId)
     .maybeSingle()
   console.log('[match-detail] looking up profile id:', otherId)
@@ -67,6 +67,13 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: true })
   console.log('[match-detail] messages:', messages?.length ?? 0, '| error:', messagesError?.message ?? 'none')
 
+  const { data: myRating } = await adminSupabase
+    .from('ratings')
+    .select('id, score, overall_score, good_bargain, quick_response, trade_reliability')
+    .eq('match_id', matchId)
+    .eq('rater_id', currentUserId)
+    .maybeSingle()
+
   // Mark inbound messages as read
   const unreadIds = (messages ?? [])
     .filter(m => m.sender_id !== currentUserId && !m.read_at)
@@ -83,6 +90,7 @@ export async function GET(request: NextRequest) {
     otherUser:    otherUser ?? null,
     sellerCards:  sellerCards ?? [],
     messages:     messages ?? [],
+    myRating:     myRating ?? null,
     currentUserId,
     role,
   })

@@ -16,10 +16,23 @@ export async function POST(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = params
-  const { stars, comment } = await request.json() as { stars: number; comment?: string }
-  if (!stars || stars < 1 || stars > 5) {
-    return NextResponse.json({ error: 'Stars must be 1–5' }, { status: 400 })
+  const body = await request.json() as {
+    good_bargain?: number
+    quick_response?: number
+    trade_reliability?: number
+    comment?: string
   }
+  const goodBargain = body.good_bargain
+  const quickResponse = body.quick_response
+  const tradeReliability = body.trade_reliability
+  const scores = [goodBargain, quickResponse, tradeReliability]
+
+  if (scores.some(score => typeof score !== 'number' || score < 1 || score > 5)) {
+    return NextResponse.json({ error: 'All rating scores must be 1–5' }, { status: 400 })
+  }
+  const ratingScores = scores as [number, number, number]
+  const overallScore = Math.round((ratingScores.reduce((sum, score) => sum + score, 0) / ratingScores.length) * 10) / 10
+  const legacyScore = Math.round(overallScore)
 
   const { data: match } = await admin
     .from('matches')
@@ -36,7 +49,17 @@ export async function POST(
 
   const { error: ratingError } = await admin
     .from('ratings')
-    .insert({ match_id: id, rater_id: user.id, rated_id: ratedId, stars, comment: comment ?? null })
+    .upsert({
+      match_id: id,
+      rater_id: user.id,
+      rated_id: ratedId,
+      good_bargain: goodBargain,
+      quick_response: quickResponse,
+      trade_reliability: tradeReliability,
+      overall_score: overallScore,
+      score: legacyScore,
+      comment: body.comment ?? null,
+    }, { onConflict: 'match_id,rater_id' })
 
   if (ratingError) {
     console.error('[rate] insert error:', ratingError.code, ratingError.message)
@@ -46,11 +69,16 @@ export async function POST(
   // Recompute average trade_rating for the rated user
   const { data: allRatings } = await admin
     .from('ratings')
-    .select('stars')
+    .select('overall_score, score')
     .eq('rated_id', ratedId)
 
   if (allRatings?.length) {
-    const avg = allRatings.reduce((s, r) => s + r.stars, 0) / allRatings.length
+    const avg = allRatings.reduce((s, r) => {
+      const score = (r as { overall_score?: number | null; score?: number | null }).overall_score
+        ?? (r as { score?: number | null }).score
+        ?? 0
+      return s + score
+    }, 0) / allRatings.length
     await admin
       .from('profiles')
       .update({ trade_rating: Math.round(avg * 10) / 10 })

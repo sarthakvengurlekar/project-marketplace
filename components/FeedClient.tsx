@@ -266,7 +266,7 @@ export default function FeedClient({
       } else if (dir === 'LIKE') {
         if (data.matchId) {
           showToast(`Trade request sent to @${sellerUsername}!`)
-          setTimeout(() => router.push(`/matches/${data.matchId}`), 1600)
+          setTimeout(() => router.push(`/matches/${data.matchId}?from=feed`), 1600)
         } else {
           showToast(`Interested sent — waiting for @${sellerUsername} to match back.`)
         }

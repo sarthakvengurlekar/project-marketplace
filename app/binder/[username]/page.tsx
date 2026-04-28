@@ -1,13 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
-import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import BinderView from '@/components/BinderView'
 
 export default function UserBinderPage() {
   const params = useParams()
+  const router = useRouter()
   const username = params.username as string
 
   const [state, setState] = useState<{
@@ -45,9 +45,9 @@ export default function UserBinderPage() {
           <p className="text-5xl mb-4">🔍</p>
           <h1 className="font-black text-xl mb-2" style={{ color: '#0A0A0A' }}>@{username} not found</h1>
           <p className="text-sm mb-6" style={{ color: '#8B7866' }}>This user doesn&apos;t exist or hasn&apos;t set up their profile yet.</p>
-          <Link href="/feed" className="font-bold text-sm" style={{ color: '#E8233B' }}>
+          <button onClick={() => router.back()} className="font-bold text-sm" style={{ color: '#E8233B', background: 'none', border: 'none', cursor: 'pointer' }}>
             ← Back to Feed
-          </Link>
+          </button>
         </div>
       </main>
     )

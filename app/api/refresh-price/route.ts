@@ -76,6 +76,26 @@ function extractTcgPrice(tcgplayer: Record<string, unknown> | undefined): number
   return null
 }
 
+function extractPptMarketPrice(json: unknown): number | null {
+  const root = json as { data?: unknown; cards?: unknown; prices?: { market?: unknown } }
+  const candidates = Array.isArray(json)
+    ? json
+    : Array.isArray(root.data)
+      ? root.data
+      : root.data
+        ? [root.data]
+        : Array.isArray(root.cards)
+          ? root.cards
+          : [root]
+
+  for (const candidate of candidates) {
+    const market = (candidate as { prices?: { market?: unknown } })?.prices?.market
+    if (typeof market === 'number' && market > 0) return market
+  }
+
+  return null
+}
+
 // ─── PPT blocked-state key in exchange_rates ─────────────────────────────────
 const PPT_BLOCK_KEY = 'PPT_BLOCKED_UNTIL'
 
@@ -118,8 +138,7 @@ export async function GET(request: NextRequest) {
         })
         if (pptRes.ok) {
           const pptJson = await pptRes.json()
-          const market = pptJson?.data?.prices?.market
-          if (typeof market === 'number' && market > 0) usdPrice = market
+          usdPrice = extractPptMarketPrice(pptJson)
         } else if (pptRes.status === 403 || pptRes.status === 429) {
           // Parse retryAfter (PPT returns it in seconds)
           let bodyText = ''
@@ -219,12 +238,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ card_id: cardId, usd_price: existing.usd_price, inr_price: existing.inr_price, aed_price: existing.aed_price, last_fetched: lastFetched })
     }
 
-    // No existing price either — store null so we stop retrying for 24 h.
-    await supabase.from('card_prices').upsert(
-      { card_id: cardId, usd_price: null, inr_price: null, aed_price: null, last_fetched: lastFetched },
-      { onConflict: 'card_id' }
-    )
-    return NextResponse.json({ card_id: cardId, usd_price: null, inr_price: null, aed_price: null, last_fetched: lastFetched })
+    const { data: dailyPrice } = await supabase
+      .from('card_price_daily')
+      .select('usd_price, price_date')
+      .eq('card_id', cardId)
+      .not('usd_price', 'is', null)
+      .order('price_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (dailyPrice?.usd_price != null) {
+      const inrPrice = Math.round(dailyPrice.usd_price * rates.USD_INR)
+      const aedPrice = Math.round(dailyPrice.usd_price * rates.USD_AED * 100) / 100
+
+      await supabase.from('card_prices').upsert(
+        { card_id: cardId, usd_price: dailyPrice.usd_price, inr_price: inrPrice, aed_price: aedPrice, last_fetched: lastFetched },
+        { onConflict: 'card_id' }
+      )
+
+      console.warn(`[refresh-price] using latest daily price for card_id=${cardId} from ${dailyPrice.price_date}`)
+      return NextResponse.json({ card_id: cardId, usd_price: dailyPrice.usd_price, inr_price: inrPrice, aed_price: aedPrice, last_fetched: lastFetched })
+    }
+
+    console.warn(`[refresh-price] no provider price and no cached price for card_id=${cardId}`)
+    return NextResponse.json({ card_id: cardId, usd_price: null, inr_price: null, aed_price: null, last_fetched: null })
   }
 
   // ── Step 4: we have a fresh price — compute local and upsert ─────────────────

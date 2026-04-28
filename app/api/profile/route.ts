@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 
@@ -9,20 +9,27 @@ const admin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const authClient = await createSupabaseServerClient()
   const { data: { user } } = await authClient.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const uid = user.id
+  const username = request.nextUrl.searchParams.get('username')?.trim()
+  const requestedUserId = request.nextUrl.searchParams.get('user_id')?.trim()
 
-  const { data: profile } = await admin
+  let profileQuery = admin
     .from('profiles')
     .select('id, username, avatar_url, city, country_code, bio, roles, trade_rating, created_at')
-    .eq('id', uid)
-    .maybeSingle()
+
+  if (username) profileQuery = profileQuery.eq('username', username)
+  else if (requestedUserId) profileQuery = profileQuery.eq('id', requestedUserId)
+  else profileQuery = profileQuery.eq('id', user.id)
+
+  const { data: profile } = await profileQuery.maybeSingle()
 
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
+  const uid = profile.id
+  const isOwner = uid === user.id
 
   const [userCardsRes, userMatchesRes, previewCardsRes] = await Promise.all([
     admin
@@ -136,6 +143,7 @@ export async function GET() {
 
   return NextResponse.json({
     profile,
+    is_owner: isOwner,
     stats: {
       card_count:            userCardsRes.count ?? 0,
       collection_value_local: collectionValueLocal,

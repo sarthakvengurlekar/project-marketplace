@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useCountry } from '@/lib/context/CountryContext'
 import { formatPrice, convertFromUSD } from '@/lib/currency'
+import { getAdjustedUsdPrice } from '@/lib/grading'
 import ScanCardModal from '@/components/ScanCardModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -59,6 +60,28 @@ function isStale(fetchedAt: string | null): boolean {
   return Date.now() - new Date(fetchedAt).getTime() > 86_400_000
 }
 
+function needsPriceRefresh(price: CardPrice | undefined): boolean {
+  if (!price || price.usd_price == null) return true
+  return isStale(price.last_fetched)
+}
+
+function getItemCurrentUsd(item: CollectionItem): number | null {
+  const rawUsd = item.cards.card_prices?.[0]?.usd_price ?? null
+  return getAdjustedUsdPrice(rawUsd, item.grading_company, item.grade)
+}
+
+function getItemDisplayUsd(item: CollectionItem): number | null {
+  return getItemCurrentUsd(item) ?? item.added_price_usd
+}
+
+function getCollectionDisplayUsd(items: CollectionItem[]): number {
+  return items.reduce((sum, item) => sum + (getItemDisplayUsd(item) ?? 0), 0)
+}
+
+function hasMissingMarketPrice(items: CollectionItem[]): boolean {
+  return items.some(item => getItemCurrentUsd(item) == null)
+}
+
 // ─── Skeleton tile ────────────────────────────────────────────────────────────
 
 function SkeletonTile() {
@@ -91,12 +114,13 @@ function CardTile({
 }) {
   const condition  = item.condition ?? 'NM'
   const priceData  = item.cards.card_prices?.[0]
-  const usdPrice   = priceData?.usd_price ?? null
-  const localPrice = countryCode === 'UAE' ? (priceData?.aed_price ?? null) : (priceData?.inr_price ?? null)
+  const marketUsd  = getItemCurrentUsd(item)
+  const displayUsd = getItemDisplayUsd(item)
+  const localPrice = displayUsd != null ? convertFromUSD(displayUsd, countryCode) : null
   const fetchedAt  = priceData?.last_fetched ?? null
 
-  const gainPct = (usdPrice != null && item.added_price_usd != null && item.added_price_usd > 0)
-    ? ((usdPrice - item.added_price_usd) / item.added_price_usd) * 100
+  const gainPct = (marketUsd != null && item.added_price_usd != null && item.added_price_usd > 0)
+    ? ((marketUsd - item.added_price_usd) / item.added_price_usd) * 100
     : null
 
   const graded = item.grading_company && item.grading_company !== 'RAW' && item.grade != null
@@ -166,11 +190,11 @@ function CardTile({
         {/* Price */}
         {priceLoading ? (
           <div className="h-3.5 w-3/4 rounded animate-pulse mt-1" style={{ background: '#e0dbd0' }} />
-        ) : usdPrice != null ? (
+        ) : displayUsd != null ? (
           <>
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="font-black text-xs" style={{ color: '#E8233B' }}>
-                {formatPrice(localPrice ?? convertFromUSD(usdPrice, countryCode), countryCode)}
+                {formatPrice(localPrice ?? convertFromUSD(displayUsd, countryCode), countryCode)}
               </p>
               {isOwner && gainPct != null && (
                 <span
@@ -184,7 +208,9 @@ function CardTile({
                 </span>
               )}
             </div>
-            {fetchedAt && (
+            {marketUsd == null ? (
+              <p className="text-[10px]" style={{ color: '#8B7866' }}>Live price pending</p>
+            ) : fetchedAt && (
               <p className="text-[10px]" style={{ color: '#8B7866' }}>Updated {timeAgo(fetchedAt)}</p>
             )}
           </>
@@ -217,6 +243,49 @@ export default function BinderView({
   const refreshed     = useRef<Set<string>>(new Set())
   const snapshotSaved = useRef(false)
 
+  const saveSnapshotAndComputeChange = useCallback(async (latestItems: CollectionItem[]) => {
+    if (!isOwner || snapshotSaved.current) return
+
+    const totalUsd = getCollectionDisplayUsd(latestItems)
+    const hasAnyPrice = latestItems.some(item => getItemDisplayUsd(item) != null)
+    const missingMarketPrice = hasMissingMarketPrice(latestItems)
+
+    if (latestItems.length > 0 && (!hasAnyPrice || totalUsd <= 0)) return
+    if (missingMarketPrice) {
+      setSevenDayChange(null)
+      return
+    }
+
+    snapshotSaved.current = true
+
+    await fetch('/api/snapshot-value', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value_usd: totalUsd }),
+    })
+
+    const res = await fetch('/api/snapshot-value')
+    if (!res.ok) return
+
+    const { snapshots } = await res.json() as { snapshots: { snapshot_date: string; value_usd: number }[] }
+
+    if (snapshots.length <= 1) {
+      const baseDate = new Date()
+      baseDate.setDate(baseDate.getDate() - 7)
+      await fetch('/api/snapshot-value', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value_usd: totalUsd, snapshot_date: baseDate.toISOString().slice(0, 10) }),
+      })
+      setSevenDayChange(0)
+      return
+    }
+
+    const oldest = snapshots[0].value_usd
+    const newest = snapshots[snapshots.length - 1].value_usd
+    setSevenDayChange(oldest > 0 ? ((newest - oldest) / oldest) * 100 : 0)
+  }, [isOwner])
+
   const fetchCollection = useCallback(async () => {
     const { data, error } = await supabase
       .from('user_cards')
@@ -240,21 +309,26 @@ export default function BinderView({
     setLoading(false)
 
     const toRefresh = typed
-      .filter(item => isStale(item.cards.card_prices?.[0]?.last_fetched ?? null))
+      .filter(item => needsPriceRefresh(item.cards.card_prices?.[0]))
       .filter(item => !refreshed.current.has(item.cards.id))
 
-    if (toRefresh.length === 0) return
+    if (toRefresh.length === 0) {
+      void saveSnapshotAndComputeChange(typed)
+      return
+    }
 
     const newIds = toRefresh.map(i => i.cards.id)
     setPriceLoadingIds(prev => new Set(Array.from(prev).concat(newIds)))
 
     const BATCH = 3
+    let latestItems = typed
+
     for (let i = 0; i < toRefresh.length; i += BATCH) {
       const batch = toRefresh.slice(i, i + BATCH)
-      await Promise.allSettled(
+      const results = await Promise.allSettled(
         batch.map(async (item) => {
           const cid = item.cards.id
-          if (refreshed.current.has(cid)) return
+          if (refreshed.current.has(cid)) return null
           refreshed.current.add(cid)
 
           const controller = new AbortController()
@@ -263,19 +337,13 @@ export default function BinderView({
           try {
             const res = await fetch(`/api/refresh-price?card_id=${encodeURIComponent(cid)}`, { signal: controller.signal })
             clearTimeout(timeoutId)
-            if (!res.ok) return
+            if (!res.ok) return null
             const { usd_price, inr_price, aed_price, last_fetched } = await res.json()
-
-            setItems(prev =>
-              prev.map(it =>
-                it.cards.id !== cid ? it : {
-                  ...it,
-                  cards: { ...it.cards, card_prices: [{ usd_price, inr_price, aed_price, last_fetched }] },
-                }
-              )
-            )
+            if (usd_price == null && item.cards.card_prices?.[0]?.usd_price != null) return null
+            return { cid, price: { usd_price, inr_price, aed_price, last_fetched } as CardPrice }
           } catch {
             // AbortError or network error — finally handles cleanup
+            return null
           } finally {
             clearTimeout(timeoutId)
             setPriceLoadingIds(prev => {
@@ -286,53 +354,28 @@ export default function BinderView({
           }
         })
       )
+
+      const updates = results
+        .filter((result): result is PromiseFulfilledResult<{ cid: string; price: CardPrice }> => (
+          result.status === 'fulfilled' && result.value != null
+        ))
+        .map(result => result.value)
+
+      if (updates.length > 0) {
+        const updateMap = new Map(updates.map(update => [update.cid, update.price]))
+        latestItems = latestItems.map(item => {
+          const price = updateMap.get(item.cards.id)
+          if (!price) return item
+          return { ...item, cards: { ...item.cards, card_prices: [price] } }
+        })
+        setItems(latestItems)
+      }
+
       if (i + BATCH < toRefresh.length) await new Promise(r => setTimeout(r, 1000))
     }
 
-    // After all prices are fresh, save today's snapshot and compute 7D change
-    if (!snapshotSaved.current) {
-      snapshotSaved.current = true
-
-      // Re-read items from state to get the latest prices
-      setItems(latest => {
-        const totalUsd = latest.reduce((sum, it) => {
-          const p = it.cards.card_prices?.[0]?.usd_price ?? 0
-          return sum + p
-        }, 0)
-
-        // Fire-and-forget: save today's snapshot, seed baseline if needed, compute 7D
-        ;(async () => {
-          await fetch('/api/snapshot-value', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ value_usd: totalUsd }),
-          })
-
-          const res = await fetch('/api/snapshot-value')
-          if (!res.ok) return
-          const { snapshots } = await res.json() as { snapshots: { snapshot_date: string; value_usd: number }[] }
-
-          if (snapshots.length <= 1) {
-            // Seed a baseline 7 days ago so tracking begins immediately (shows 0% to start)
-            const baseDate = new Date()
-            baseDate.setDate(baseDate.getDate() - 7)
-            await fetch('/api/snapshot-value', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ value_usd: totalUsd, snapshot_date: baseDate.toISOString().slice(0, 10) }),
-            })
-            setSevenDayChange(0)
-          } else {
-            const oldest = snapshots[0].value_usd
-            const newest = snapshots[snapshots.length - 1].value_usd
-            if (oldest > 0) setSevenDayChange(((newest - oldest) / oldest) * 100)
-          }
-        })()
-
-        return latest
-      })
-    }
-  }, [profileUserId])
+    void saveSnapshotAndComputeChange(latestItems)
+  }, [profileUserId, saveSnapshotAndComputeChange])
 
   useEffect(() => { fetchCollection() }, [fetchCollection])
 
@@ -346,16 +389,14 @@ export default function BinderView({
   }
 
   const totalLocal = items.reduce((sum, item) => {
-    const p = item.cards.card_prices?.[0]
-    const local = countryCode === 'UAE' ? (p?.aed_price ?? null) : (p?.inr_price ?? null)
-    if (local != null) return sum + local
-    return sum + convertFromUSD(p?.usd_price ?? 0, countryCode)
+    const displayUsd = getItemDisplayUsd(item)
+    return sum + convertFromUSD(displayUsd ?? 0, countryCode)
   }, 0)
 
   // All-time gain: compare current USD value vs added_price_usd for cards that have both
   const { currentUsd: gainCurrentUsd, addedUsd: gainAddedUsd } = items.reduce(
     (acc, item) => {
-      const cur = item.cards.card_prices?.[0]?.usd_price ?? null
+      const cur = getItemCurrentUsd(item)
       const add = item.added_price_usd ?? null
       if (cur != null && add != null && add > 0) {
         acc.currentUsd += cur
@@ -370,6 +411,7 @@ export default function BinderView({
     : null
 
   const pricesUpdating = priceLoadingIds.size > 0
+  const missingMarketPrice = hasMissingMarketPrice(items)
 
   return (
     <main className="min-h-screen px-4 py-6 pb-28" style={{ background: '#FAF6EC' }}>
@@ -429,10 +471,10 @@ export default function BinderView({
                 ...(isOwner ? [
                   {
                     label: '7D',
-                    value: sevenDayChange != null
+                    value: !pricesUpdating && !missingMarketPrice && sevenDayChange != null
                       ? `${sevenDayChange >= 0 ? '+' : ''}${sevenDayChange.toFixed(1)}%`
                       : '—',
-                    color: sevenDayChange == null ? '#8B7866'
+                    color: pricesUpdating || missingMarketPrice || sevenDayChange == null ? '#8B7866'
                       : sevenDayChange >= 0 ? '#16a34a' : '#dc2626',
                   },
                   {

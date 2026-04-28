@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { useCountry } from '@/lib/context/CountryContext'
 import { formatPriceFromUSD } from '@/lib/currency'
+import { getGradeMultiplier } from '@/lib/grading'
 import GradingSelector, { GradingSelection, DEFAULT_GRADING } from '@/components/GradingSelector'
 import ScanCardModal from '@/components/ScanCardModal'
 
@@ -597,6 +598,10 @@ export default function AddCardsPage() {
         return
       }
 
+      const addedPriceUsd = usdPrice != null
+        ? usdPrice * getGradeMultiplier(grading.company, grading.grade)
+        : null
+
       const { error: ucErr } = await supabase.from('user_cards').insert({
         user_id:          userId,
         card_id:          cardId,
@@ -605,12 +610,12 @@ export default function AddCardsPage() {
         grading_company:  grading.company,
         grade:            grading.grade,
         grade_label:      grading.grade_label,
-        added_price_usd:  usdPrice ?? null,
+        added_price_usd:  addedPriceUsd,
       })
       if (ucErr) throw ucErr
 
       setAddStates(prev => ({ ...prev, [cardId]: 'added' }))
-      setAddedTotalUsd(prev => prev + (usdPrice ?? 0))
+      setAddedTotalUsd(prev => prev + (addedPriceUsd ?? 0))
       setToast({ message: `${card.name ?? 'Card'} added to collection!`, type: 'success' })
       setGradingCard(null)
     } catch (err: unknown) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -862,26 +862,31 @@ function ProfileSkeleton() {
 
 export default function ProfilePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { setCountryCode } = useCountry()
+  const profileUsername = searchParams.get('username')?.trim() ?? ''
 
   const [profile,      setProfile]      = useState<Profile | null>(null)
   const [stats,        setStats]        = useState<Stats | null>(null)
   const [previewCards, setPreviewCards] = useState<PreviewCard[]>([])
   const [loading,      setLoading]      = useState(true)
   const [editOpen,     setEditOpen]     = useState(false)
+  const [isOwner,      setIsOwner]      = useState(true)
   const [badgeUnlock,  setBadgeUnlock]  = useState<BadgeUnlock | null>(null)
 
   const loadProfile = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true)
-    const res = await fetch('/api/profile', { cache: 'no-store' })
+    const qs = profileUsername ? `?username=${encodeURIComponent(profileUsername)}` : ''
+    const res = await fetch(`/api/profile${qs}`, { cache: 'no-store' })
     if (res.status === 401) { router.replace('/login'); return }
     if (!res.ok) { setLoading(false); return }
     const data = await res.json()
     setProfile(data.profile)
     setStats(data.stats)
     setPreviewCards(data.preview_cards ?? [])
+    setIsOwner(data.is_owner ?? !profileUsername)
     setLoading(false)
-  }, [router])
+  }, [profileUsername, router])
 
   useEffect(() => {
     loadProfile(true)
@@ -929,7 +934,7 @@ export default function ProfilePage() {
   ), [badgeProgress])
 
   useEffect(() => {
-    if (!profile || badgeProgress.length === 0) return
+    if (!isOwner || !profile || badgeProgress.length === 0) return
 
     const storageKey = `pt_seen_badges_${profile.id}`
     const existing = window.localStorage.getItem(storageKey)
@@ -951,7 +956,7 @@ export default function ProfilePage() {
     if (!badge || !stage) return
 
     setBadgeUnlock({ badgeName: badge.name, level: stage.label, text: stage.text })
-  }, [achievedBadgeKeys, badgeProgress, badgeUnlock, profile])
+  }, [achievedBadgeKeys, badgeProgress, badgeUnlock, isOwner, profile])
 
   function closeBadgeUnlock() {
     if (profile) {
@@ -990,31 +995,53 @@ export default function ProfilePage() {
           backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(244,208,63,0.55) 12px, rgba(244,208,63,0.55) 22px)',
         }} />
 
-        {/* EDIT button */}
-        <button
-          onClick={() => setEditOpen(true)}
-          style={{
-            position:   'absolute',
-            top:        12,
-            right:      12,
-            background: '#FAF6EC',
-            border:     '2px solid #0A0A0A',
-            boxShadow:  '2px 2px 0 #0A0A0A',
-            color:      '#0A0A0A',
-            fontWeight: 900,
-            fontSize:   11,
-            padding:    '5px 12px',
-            cursor:     'pointer',
-            letterSpacing: '0.05em',
-          }}
-        >
-          EDIT
-        </button>
+        {isOwner ? (
+          <button
+            onClick={() => setEditOpen(true)}
+            style={{
+              position:   'absolute',
+              top:        12,
+              right:      12,
+              background: '#FAF6EC',
+              border:     '2px solid #0A0A0A',
+              boxShadow:  '2px 2px 0 #0A0A0A',
+              color:      '#0A0A0A',
+              fontWeight: 900,
+              fontSize:   11,
+              padding:    '5px 12px',
+              cursor:     'pointer',
+              letterSpacing: '0.05em',
+            }}
+          >
+            EDIT
+          </button>
+        ) : (
+          <button
+            onClick={() => router.back()}
+            style={{
+              position:   'absolute',
+              top:        12,
+              left:       12,
+              background: '#F4D03F',
+              border:     '2px solid #0A0A0A',
+              boxShadow:  '2px 2px 0 #0A0A0A',
+              color:      '#0A0A0A',
+              fontWeight: 900,
+              fontSize:   13,
+              width:      36,
+              height:     36,
+              cursor:     'pointer',
+            }}
+            aria-label="Back"
+          >
+            ←
+          </button>
+        )}
       </div>
 
       {/* ── Avatar + name ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: -40, paddingBottom: 16, paddingLeft: 16, paddingRight: 16 }}>
-        <button onClick={() => setEditOpen(true)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+        <button onClick={() => { if (isOwner) setEditOpen(true) }} style={{ background: 'none', border: 'none', padding: 0, cursor: isOwner ? 'pointer' : 'default' }}>
           <div style={{
             width:      80,
             height:     80,
@@ -1103,9 +1130,9 @@ export default function ProfilePage() {
       <div style={{ padding: '0 16px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 }}>
-            MY COLLECTION
+            {isOwner ? 'MY COLLECTION' : `${profile.username.toUpperCase()}'S COLLECTION`}
           </p>
-          <Link href="/binder" style={{ color: '#E8233B', fontWeight: 800, fontSize: 12, textDecoration: 'none' }}>
+          <Link href={isOwner ? '/binder' : `/binder/${profile.username}`} style={{ color: '#E8233B', fontWeight: 800, fontSize: 12, textDecoration: 'none' }}>
             VIEW ALL →
           </Link>
         </div>
@@ -1117,7 +1144,7 @@ export default function ProfilePage() {
             <p style={{ color: '#8B7866', fontSize: 13, fontStyle: 'italic' }}>No cards yet</p>
           ) : (
             previewCards.map(uc => (
-              <Link key={uc.id} href="/binder" style={{ textDecoration: 'none', flexShrink: 0 }}>
+              <Link key={uc.id} href={isOwner ? '/binder' : `/binder/${profile.username}`} style={{ textDecoration: 'none', flexShrink: 0 }}>
                 <div style={{
                   width: 60, aspectRatio: '2.5/3.5',
                   background: '#f0ece2', border: '2px solid #0A0A0A',
@@ -1142,46 +1169,50 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* ── Notifications row ────────────────────────────────────────────── */}
-      <div style={{ padding: '0 16px 16px' }}>
-        <div style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #E8233B' }}>
-          <button
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer' }}
-          >
-            <span style={{ fontSize: 18, flexShrink: 0 }}>🔔</span>
-            <div style={{ flex: 1, textAlign: 'left' }}>
-              <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 14, margin: 0 }}>Notifications</p>
-              <p style={{ color: '#8B7866', fontSize: 11, margin: '2px 0 0' }}>3 enabled</p>
+      {isOwner && (
+        <>
+          {/* ── Notifications row ────────────────────────────────────────────── */}
+          <div style={{ padding: '0 16px 16px' }}>
+            <div style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #E8233B' }}>
+              <button
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: 18, flexShrink: 0 }}>🔔</span>
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 14, margin: 0 }}>Notifications</p>
+                  <p style={{ color: '#8B7866', fontSize: 11, margin: '2px 0 0' }}>3 enabled</p>
+                </div>
+                <span style={{ color: '#8B7866', fontSize: 16 }}>›</span>
+              </button>
             </div>
-            <span style={{ color: '#8B7866', fontSize: 16 }}>›</span>
-          </button>
-        </div>
-      </div>
+          </div>
 
-      {/* ── Sign out ─────────────────────────────────────────────────────── */}
-      <div style={{ padding: '0 16px' }}>
-        <button
-          onClick={handleSignOut}
-          style={{
-            width:      '100%',
-            padding:    '14px 0',
-            background: '#FAF6EC',
-            border:     '2px solid #0A0A0A',
-            color:      '#E8233B',
-            fontWeight: 900,
-            fontSize:   13,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            cursor:     'pointer',
-          }}
-        >
-          Sign Out
-        </button>
-      </div>
+          {/* ── Sign out ─────────────────────────────────────────────────────── */}
+          <div style={{ padding: '0 16px' }}>
+            <button
+              onClick={handleSignOut}
+              style={{
+                width:      '100%',
+                padding:    '14px 0',
+                background: '#FAF6EC',
+                border:     '2px solid #0A0A0A',
+                color:      '#E8233B',
+                fontWeight: 900,
+                fontSize:   13,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                cursor:     'pointer',
+              }}
+            >
+              Sign Out
+            </button>
+          </div>
+        </>
+      )}
       </div>
 
       {/* ── Edit modal ───────────────────────────────────────────────────── */}
-      {editOpen && (
+      {isOwner && editOpen && (
         <EditProfileModal
           profile={profile}
           onClose={() => setEditOpen(false)}
@@ -1189,7 +1220,7 @@ export default function ProfilePage() {
         />
       )}
 
-      {badgeUnlock && (
+      {isOwner && badgeUnlock && (
         <BadgeUnlockModal unlock={badgeUnlock} onClose={closeBadgeUnlock} />
       )}
     </main>

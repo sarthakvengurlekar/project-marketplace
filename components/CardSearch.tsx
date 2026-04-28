@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { useCountry } from '@/lib/context/CountryContext'
 import { formatPriceFromUSD } from '@/lib/currency'
+import { getGradeMultiplier } from '@/lib/grading'
 import GradingSelector, { GradingSelection, DEFAULT_GRADING } from '@/components/GradingSelector'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -216,12 +217,11 @@ function GradingDrawer({
 type AddState = 'idle' | 'loading' | 'added' | 'duplicate'
 
 function CardTile({
-  card, addState, onAdd, rates, countryCode,
+  card, addState, onAdd, countryCode,
 }: {
   card: PptCard
   addState: AddState
   onAdd: () => void
-  rates: ExchangeRates
   countryCode: string
 }) {
   const imageUrl  = getImageUrl(card)
@@ -538,9 +538,14 @@ export default function CardSearch({ onCardAdded }: { onCardAdded?: () => void }
         setGradingCard(null); return
       }
 
+      const addedPriceUsd = usdPrice != null
+        ? usdPrice * getGradeMultiplier(grading.company, grading.grade)
+        : null
+
       const { error: ucErr } = await supabase.from('user_cards').insert({
         user_id: userId, card_id: cardId, list_type: 'HAVE', added_via: 'manual',
         grading_company: grading.company, grade: grading.grade, grade_label: grading.grade_label,
+        added_price_usd: addedPriceUsd,
       })
       if (ucErr) throw ucErr
 
@@ -626,7 +631,6 @@ export default function CardSearch({ onCardAdded }: { onCardAdded?: () => void }
                 card={card}
                 addState={addStates[String(card.tcgPlayerId ?? '')] ?? 'idle'}
                 onAdd={() => handleRequestAdd(card)}
-                rates={rates}
                 countryCode={countryCode}
               />
             ) : (

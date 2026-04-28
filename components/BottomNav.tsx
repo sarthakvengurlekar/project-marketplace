@@ -69,9 +69,17 @@ export default function BottomNav() {
       if (!res.ok) return
       const data = await res.json()
       const all = data.matches ?? [...(data.buying ?? []), ...(data.selling ?? [])]
-      const count = all.filter((m: { lastMessage?: { isUnread: boolean }; status?: string; role?: string }) =>
-        m.lastMessage?.isUnread || (m.status === 'PENDING' && m.role === 'SELLER')
-      ).length
+      const count = all.reduce((sum: number, m: {
+        lastMessage?: { isUnread: boolean }
+        status?: string
+        role?: string
+        pendingOffers?: Array<{ needsAction?: boolean }>
+      }) => {
+        const unread = m.lastMessage?.isUnread ? 1 : 0
+        const pendingMatch = m.status === 'PENDING' && m.role === 'SELLER' ? 1 : 0
+        const pendingOffers = (m.pendingOffers ?? []).filter(offer => offer.needsAction).length
+        return sum + unread + pendingMatch + pendingOffers
+      }, 0)
       setUnreadCount(count)
     } catch { /* silent */ }
   }, [])

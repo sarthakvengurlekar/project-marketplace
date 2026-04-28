@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -72,6 +72,32 @@ interface CardPriceData {
   history: { date: string; price: number; volume: number }[]
 }
 
+type OfferResolution = 'accepted' | 'declined'
+type RatingKey = 'good_bargain' | 'quick_response' | 'trade_reliability'
+
+function parseOfferPayload(content: string): OfferPayload | null {
+  if (!content.startsWith('[OFFER]:')) return null
+  try {
+    return JSON.parse(content.slice('[OFFER]:'.length)) as OfferPayload
+  } catch {
+    return null
+  }
+}
+
+function parseOfferDecision(content: string): { status: OfferResolution; cardName: string } | null {
+  const accepted = content.match(/^✓ Offer accepted — (.+?)(?: for .*)?$/)
+  if (accepted?.[1]) return { status: 'accepted', cardName: accepted[1] }
+
+  const declined = content.match(/^✗ Offer declined — (.+)$/)
+  if (declined?.[1]) return { status: 'declined', cardName: declined[1] }
+
+  return null
+}
+
+function normalizeOfferName(name: string) {
+  return name.trim().toLowerCase()
+}
+
 // ─── Offer modal ──────────────────────────────────────────────────────────────
 
 function OfferModal({
@@ -82,7 +108,7 @@ function OfferModal({
 }: {
   currentUserId: string
   countryCode: string
-  onSend: (content: string) => void
+  onSend: (content: string) => void | Promise<boolean>
   onClose: () => void
 }) {
   const [cards, setCards]             = useState<MyCard[]>([])
@@ -306,20 +332,33 @@ function RatingModal({
   onClose,
 }: {
   otherUsername: string
-  onSubmit: (stars: number, comment: string) => Promise<void>
+  onSubmit: (scores: Record<RatingKey, number>, comment: string) => Promise<boolean>
   onClose: () => void
 }) {
-  const [stars, setStars]           = useState(5)
+  const [scores, setScores] = useState<Record<RatingKey, number>>({
+    good_bargain: 5,
+    quick_response: 5,
+    trade_reliability: 5,
+  })
   const [comment, setComment]       = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone]             = useState(false)
+  const [error, setError]           = useState<string | null>(null)
 
   async function handleSubmit() {
+    setError(null)
     setSubmitting(true)
-    await onSubmit(stars, comment)
-    setDone(true)
+    const ok = await onSubmit(scores, comment)
+    if (ok) setDone(true)
+    else setError('Could not save rating. Please try again.')
     setSubmitting(false)
   }
+
+  const ratingRows: Array<{ key: RatingKey; label: string; sub: string }> = [
+    { key: 'good_bargain', label: 'Good bargain', sub: 'Fair offer, fair negotiation' },
+    { key: 'quick_response', label: 'Quick response', sub: 'Responsive and easy to coordinate with' },
+    { key: 'trade_reliability', label: 'Trade reliability', sub: 'Accurate card details and trustworthy follow-through' },
+  ]
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(10,10,10,0.7)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 16 }}>
@@ -340,15 +379,37 @@ function RatingModal({
           <>
             <h2 style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 18, margin: '0 0 4px' }}>Rate this trade</h2>
             <p style={{ color: '#8B7866', fontSize: 13, margin: '0 0 20px' }}>How was your experience with @{otherUsername}?</p>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 20 }}>
-              {[1, 2, 3, 4, 5].map(s => (
-                <button
-                  key={s}
-                  onClick={() => setStars(s)}
-                  style={{ background: 'none', border: 'none', fontSize: 30, cursor: 'pointer', color: s <= stars ? '#F4D03F' : '#e8e2d4' }}
-                >
-                  ★
-                </button>
+            <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
+              {ratingRows.map(row => (
+                <div key={row.key} style={{ border: '2px solid #0A0A0A', background: '#FAF6EC', padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+                    <div>
+                      <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 13, margin: 0 }}>{row.label}</p>
+                      <p style={{ color: '#8B7866', fontSize: 10, margin: '2px 0 0' }}>{row.sub}</p>
+                    </div>
+                    <span style={{ color: '#E8233B', fontWeight: 900, fontSize: 13 }}>{scores[row.key]}/5</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                    {[1, 2, 3, 4, 5].map(score => (
+                      <button
+                        key={score}
+                        onClick={() => setScores(prev => ({ ...prev, [row.key]: score }))}
+                        style={{
+                          height: 32,
+                          background: score <= scores[row.key] ? '#F4D03F' : '#FAF6EC',
+                          border: '2px solid #0A0A0A',
+                          color: '#0A0A0A',
+                          fontWeight: 900,
+                          fontSize: 12,
+                          cursor: 'pointer',
+                        }}
+                        aria-label={`${row.label}: ${score}`}
+                      >
+                        {score}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
             <textarea
@@ -363,6 +424,9 @@ function RatingModal({
                 resize: 'none', outline: 'none', marginBottom: 16,
               }}
             />
+            {error && (
+              <p style={{ color: '#E8233B', fontWeight: 800, fontSize: 12, margin: '0 0 12px' }}>{error}</p>
+            )}
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={onClose}
@@ -391,6 +455,7 @@ export default function ChatPage() {
   const params  = useParams<{ match_id: string }>()
   const matchId = params.match_id
   const router  = useRouter()
+  const searchParams = useSearchParams()
   const { countryCode } = useCountry()
 
   const [match,          setMatch]          = useState<MatchData | null>(null)
@@ -405,6 +470,7 @@ export default function ChatPage() {
   const [sending,        setSending]        = useState(false)
   const [acting,         setActing]         = useState(false)
   const [showRating,     setShowRating]     = useState(false)
+  const [hasRated,       setHasRated]       = useState(false)
   const [offerOpen,      setOfferOpen]      = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -428,6 +494,7 @@ export default function ChatPage() {
     setMessages(data.messages ?? [])
     setCurrentUserId(data.currentUserId)
     setRole(data.role)
+    setHasRated(Boolean(data.myRating))
     setLoading(false)
   }
 
@@ -452,7 +519,7 @@ export default function ChatPage() {
   }, [matchId])
 
   async function directSend(content: string) {
-    if (!content || sending) return
+    if (!content || sending) return false
     setSending(true)
     const optimisticId = `opt-${Date.now()}`
     setMessages(prev => [...prev, { id: optimisticId, sender_id: currentUserId, content, created_at: new Date().toISOString(), read_at: null }])
@@ -464,10 +531,21 @@ export default function ChatPage() {
     const data = await res.json()
     if (res.ok && data.message) {
       setMessages(prev => prev.map(m => m.id === optimisticId ? data.message : m))
+      setSending(false)
+      return true
     } else {
       setMessages(prev => prev.filter(m => m.id !== optimisticId))
     }
     setSending(false)
+    return false
+  }
+
+  async function handleOfferDecision(accepted: boolean, offer: OfferPayload) {
+    const content = accepted
+      ? `✓ Offer accepted — ${offer.cardName} for ${offer.currency === 'INR' ? '₹' : 'AED '}${offer.offerAmount.toLocaleString('en-IN')}`
+      : `✗ Offer declined — ${offer.cardName}`
+    const sent = await directSend(content)
+    if (sent && accepted && !hasRated) setShowRating(true)
   }
 
   async function handleSend() {
@@ -519,13 +597,16 @@ export default function ChatPage() {
     setActing(false)
   }
 
-  async function handleRate(stars: number, comment: string) {
-    await fetch(`/api/matches/${matchId}/rate`, {
+  async function handleRate(scores: Record<RatingKey, number>, comment: string) {
+    const res = await fetch(`/api/matches/${matchId}/rate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stars, comment }),
+      body: JSON.stringify({ ...scores, comment }),
     })
+    if (!res.ok) return false
     setMatch(prev => prev ? { ...prev, status: 'COMPLETED' } : prev)
+    setHasRated(true)
+    return true
   }
 
   function formatTime(iso: string) {
@@ -545,6 +626,51 @@ export default function ChatPage() {
     && !(role === 'SELLER' && match.status === 'PENDING')
 
   const initials = otherUser?.username?.[0]?.toUpperCase() ?? '?'
+  const fromTab = (() => {
+    const from = searchParams.get('from')
+    if (from === 'pending' || from === 'done' || from === 'chatbox' || from === 'feed') return from
+    return 'chatbox'
+  })()
+  const tradesBackHref = fromTab === 'feed' ? '/feed' : `/matches?tab=${fromTab}`
+
+  const offerResolutions = useMemo(() => {
+    const resolutions: Record<string, OfferResolution> = {}
+    const pendingOffers: Array<{ id: string; cardName: string }> = []
+
+    for (const message of messages) {
+      const offer = parseOfferPayload(message.content)
+      if (offer) {
+        pendingOffers.push({ id: message.id, cardName: offer.cardName })
+        continue
+      }
+
+      const decision = parseOfferDecision(message.content)
+      if (!decision) continue
+
+      const decisionName = normalizeOfferName(decision.cardName)
+      const matchedIndex = (() => {
+        for (let i = pendingOffers.length - 1; i >= 0; i -= 1) {
+          if (normalizeOfferName(pendingOffers[i].cardName) === decisionName) return i
+        }
+        return pendingOffers.length - 1
+      })()
+
+      if (matchedIndex < 0) continue
+      const [resolvedOffer] = pendingOffers.splice(matchedIndex, 1)
+      resolutions[resolvedOffer.id] = decision.status
+    }
+
+    return resolutions
+  }, [messages])
+
+  const hasAcceptedOffer = useMemo(() => (
+    messages.some(message => parseOfferDecision(message.content)?.status === 'accepted')
+  ), [messages])
+
+  useEffect(() => {
+    if (loading || !otherUser || hasRated || showRating || !hasAcceptedOffer) return
+    setShowRating(true)
+  }, [hasAcceptedOffer, hasRated, loading, otherUser, showRating])
 
   // ── Loading ─────────────────────────────────────────────────────────────────
   if (loading) {
@@ -568,7 +694,7 @@ export default function ChatPage() {
       <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', background: '#FAF6EC' }}>
         <span style={{ fontSize: 40, display: 'block', marginBottom: 12 }}>⚠️</span>
         <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16, marginBottom: 8 }}>{error ?? 'Match not found'}</p>
-        <Link href="/matches" style={{ color: '#E8233B', fontWeight: 800, fontSize: 14 }}>← Back to Trades</Link>
+        <Link href={tradesBackHref} style={{ color: '#E8233B', fontWeight: 800, fontSize: 14 }}>← Back to {fromTab === 'feed' ? 'Feed' : 'Trades'}</Link>
       </main>
     )
   }
@@ -591,7 +717,7 @@ export default function ChatPage() {
         <div style={{ maxWidth: 640, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px' }}>
           {/* Back */}
           <Link
-            href="/matches"
+            href={tradesBackHref}
             style={{
               width:          36,
               height:         36,
@@ -612,7 +738,7 @@ export default function ChatPage() {
           </Link>
 
           {/* Avatar */}
-          <div style={{
+          <Link href={otherUser ? `/profile?username=${encodeURIComponent(otherUser.username)}` : '#'} style={{
             width:    44,
             height:   44,
             border:   '2px solid #0A0A0A',
@@ -620,6 +746,7 @@ export default function ChatPage() {
             overflow: 'hidden',
             flexShrink: 0,
             position: 'relative',
+            textDecoration: 'none',
           }}>
             {otherUser?.avatar_url ? (
               <Image src={otherUser.avatar_url} alt={otherUser.username} fill className="object-cover" unoptimized />
@@ -628,17 +755,17 @@ export default function ChatPage() {
                 <span style={{ color: '#FAF6EC', fontWeight: 900, fontSize: 18 }}>{initials}</span>
               </div>
             )}
-          </div>
+          </Link>
 
           {/* Name + status */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <Link href={otherUser ? `/profile?username=${encodeURIComponent(otherUser.username)}` : '#'} style={{ flex: 1, minWidth: 0, textDecoration: 'none' }}>
             <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 15, margin: 0, lineHeight: 1.2 }}>
               @{otherUser?.username ?? '—'}
             </p>
             <p style={{ color: '#E8233B', fontSize: 11, margin: '2px 0 0', fontWeight: 600 }}>
               {otherUser?.city ? `● Online · ${otherUser.city}` : '● Online'}
             </p>
-          </div>
+          </Link>
 
           {/* Binder link */}
           {otherUser && (
@@ -693,10 +820,11 @@ export default function ChatPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
                 {match.status === 'ACTIVE' && (
                   <button
-                    onClick={() => setShowRating(true)}
-                    style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', color: '#0A0A0A', fontWeight: 900, fontSize: 12, padding: '5px 12px', cursor: 'pointer' }}
+                    onClick={() => { if (!hasRated) setShowRating(true) }}
+                    disabled={hasRated}
+                    style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', color: '#0A0A0A', fontWeight: 900, fontSize: 12, padding: '5px 12px', cursor: hasRated ? 'default' : 'pointer', opacity: hasRated ? 0.55 : 1 }}
                   >
-                    Complete
+                    {hasRated ? 'Rated' : 'Complete'}
                   </button>
                 )}
                 {otherUser && (
@@ -789,8 +917,9 @@ export default function ChatPage() {
 
             let offerPayload: OfferPayload | null = null
             if (isOffer) {
-              try { offerPayload = JSON.parse(msg.content.slice('[OFFER]:'.length)) } catch { /* ignore */ }
+              offerPayload = parseOfferPayload(msg.content)
             }
+            const offerResolution = offerPayload ? offerResolutions[msg.id] ?? null : null
 
             return (
               <div key={msg.id}>
@@ -847,17 +976,32 @@ export default function ChatPage() {
                               </p>
                             </div>
                           </div>
-                          {/* Accept / Decline — receiver only */}
-                          {!isMe && (
+                          {offerResolution && (
+                            <div style={{
+                              borderTop: '2px solid #0A0A0A',
+                              padding: '10px 12px',
+                              background: offerResolution === 'accepted' ? '#0A0A0A' : '#E8233B',
+                              color: '#FAF6EC',
+                              fontWeight: 900,
+                              fontSize: 11,
+                              letterSpacing: '0.05em',
+                              textTransform: 'uppercase',
+                              textAlign: 'center',
+                            }}>
+                              {offerResolution === 'accepted' ? '✓ Offer accepted' : '✗ Offer declined'}
+                            </div>
+                          )}
+                          {/* Accept / Decline — receiver only while unresolved */}
+                          {!isMe && !offerResolution && (
                             <div style={{ borderTop: '2px solid #0A0A0A', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
                               <button
-                                onClick={() => directSend(`✓ Offer accepted — ${offerPayload!.cardName} for ${offerPayload!.currency === 'INR' ? '₹' : 'AED '}${offerPayload!.offerAmount.toLocaleString('en-IN')}`)}
+                                onClick={() => handleOfferDecision(true, offerPayload!)}
                                 style={{ padding: '10px 0', background: '#0A0A0A', border: 'none', borderRight: '2px solid #0A0A0A', color: '#FAF6EC', fontWeight: 900, fontSize: 11, cursor: 'pointer', letterSpacing: '0.05em' }}
                               >
                                 ✓ Accept
                               </button>
                               <button
-                                onClick={() => directSend(`✗ Offer declined — ${offerPayload!.cardName}`)}
+                                onClick={() => handleOfferDecision(false, offerPayload!)}
                                 style={{ padding: '10px 0', background: '#FAF6EC', border: 'none', color: '#E8233B', fontWeight: 900, fontSize: 11, cursor: 'pointer', letterSpacing: '0.05em' }}
                               >
                                 ✗ Decline

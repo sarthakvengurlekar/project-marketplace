@@ -35,6 +35,20 @@ interface CompletedOffer {
   summary: string
 }
 
+interface PendingOffer {
+  sentAt: string
+  sentBy: string
+  needsAction: boolean
+  cardName: string
+  imageUrl: string | null
+  setName: string | null
+  condition: string | null
+  isFoil: boolean
+  marketLocal: number | null
+  currency: string
+  offerAmount: number | null
+}
+
 function parseOffer(content: string): OfferPayload | null {
   if (!content.startsWith('[OFFER]:')) return null
   try {
@@ -42,6 +56,28 @@ function parseOffer(content: string): OfferPayload | null {
   } catch {
     return null
   }
+}
+
+function parseOfferDecision(content: string): { accepted: boolean; cardName: string } | null {
+  const accepted = content.match(/^✓ Offer accepted — (.+?)(?: for .*)?$/)
+  if (accepted?.[1]) return { accepted: true, cardName: accepted[1] }
+
+  const declined = content.match(/^✗ Offer declined — (.+)$/)
+  if (declined?.[1]) return { accepted: false, cardName: declined[1] }
+
+  return null
+}
+
+function normalizedCardName(name: string) {
+  return name.trim().toLowerCase()
+}
+
+function findPendingOfferIndex(offers: PendingOffer[], cardName: string) {
+  const target = normalizedCardName(cardName)
+  for (let i = offers.length - 1; i >= 0; i -= 1) {
+    if (normalizedCardName(offers[i].cardName) === target) return i
+  }
+  return offers.length - 1
 }
 
 function fallbackAcceptedOffer(content: string, createdAt: string, senderId: string): CompletedOffer {
@@ -114,35 +150,64 @@ export async function GET() {
   }
 
   const completedOfferMap: Record<string, CompletedOffer[]> = {}
-  const pendingOfferMap: Record<string, OfferPayload[]> = {}
+  const pendingOfferMap: Record<string, PendingOffer[]> = {}
   const chronologicalMessages = [...(allMessages ?? [])].reverse()
 
   for (const msg of chronologicalMessages) {
     const offer = parseOffer(msg.content)
     if (offer) {
-      pendingOfferMap[msg.match_id] = [...(pendingOfferMap[msg.match_id] ?? []), offer]
+      pendingOfferMap[msg.match_id] = [
+        ...(pendingOfferMap[msg.match_id] ?? []),
+        {
+          sentAt: msg.created_at,
+          sentBy: msg.sender_id,
+          needsAction: msg.sender_id !== currentUserId,
+          cardName: offer.cardName ?? 'Pending offer',
+          imageUrl: offer.imageUrl ?? null,
+          setName: offer.setName ?? null,
+          condition: offer.condition ?? null,
+          isFoil: Boolean(offer.isFoil),
+          marketLocal: offer.marketLocal ?? null,
+          currency: offer.currency ?? 'INR',
+          offerAmount: typeof offer.offerAmount === 'number' ? offer.offerAmount : null,
+        },
+      ]
       continue
     }
 
-    if (!msg.content.startsWith('✓ Offer accepted')) continue
+    const decision = parseOfferDecision(msg.content)
+    if (decision && !decision.accepted) {
+      const previousOffers = pendingOfferMap[msg.match_id] ?? []
+      const matchedIndex = findPendingOfferIndex(previousOffers, decision.cardName)
+      pendingOfferMap[msg.match_id] = matchedIndex >= 0
+        ? previousOffers.filter((_, index) => index !== matchedIndex)
+        : previousOffers
+      continue
+    }
+
+    if (!decision?.accepted) continue
 
     const previousOffers = pendingOfferMap[msg.match_id] ?? []
-    const matchedOffer = previousOffers.at(-1)
+    const matchedIndex = findPendingOfferIndex(previousOffers, decision.cardName)
+    const matchedOffer = matchedIndex >= 0 ? previousOffers[matchedIndex] : undefined
     const completedOffer: CompletedOffer = matchedOffer ? {
       acceptedAt: msg.created_at,
       acceptedBy: msg.sender_id,
-      cardName: matchedOffer.cardName ?? 'Accepted offer',
-      imageUrl: matchedOffer.imageUrl ?? null,
-      setName: matchedOffer.setName ?? null,
-      condition: matchedOffer.condition ?? null,
-      isFoil: Boolean(matchedOffer.isFoil),
-      marketLocal: matchedOffer.marketLocal ?? null,
-      currency: matchedOffer.currency ?? 'INR',
-      offerAmount: typeof matchedOffer.offerAmount === 'number' ? matchedOffer.offerAmount : null,
+      cardName: matchedOffer.cardName,
+      imageUrl: matchedOffer.imageUrl,
+      setName: matchedOffer.setName,
+      condition: matchedOffer.condition,
+      isFoil: matchedOffer.isFoil,
+      marketLocal: matchedOffer.marketLocal,
+      currency: matchedOffer.currency,
+      offerAmount: matchedOffer.offerAmount,
       summary: msg.content,
     } : fallbackAcceptedOffer(msg.content, msg.created_at, msg.sender_id)
 
     completedOfferMap[msg.match_id] = [...(completedOfferMap[msg.match_id] ?? []), completedOffer]
+    pendingOfferMap[msg.match_id] = matchedIndex >= 0
+      ? previousOffers.filter((_, index) => index !== matchedIndex)
+      : previousOffers
   }
 
   // Assemble unified list
@@ -158,11 +223,15 @@ export async function GET() {
       otherUser:    profileMap[otherUserId] ?? null,
       lastMessage:  lastMsgMap[m.id] ?? null,
       completedOffers: completedOfferMap[m.id] ?? [],
+      pendingOffers: pendingOfferMap[m.id] ?? [],
     }
   })
 
   // hasPendingAction = seller has PENDING matches waiting on them
-  const hasPendingAction = enriched.some(m => m.status === 'PENDING' && m.role === 'SELLER')
+  const hasPendingAction = enriched.some(m =>
+    (m.status === 'PENDING' && m.role === 'SELLER')
+    || m.pendingOffers.some(offer => offer.needsAction)
+  )
 
   return NextResponse.json({ matches: enriched, hasUnread, hasPendingAction, currentUserId })
 }

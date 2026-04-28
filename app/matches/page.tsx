@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -28,6 +28,7 @@ interface MatchRow {
   otherUser: OtherUser | null
   lastMessage: { content: string; created_at: string; isUnread: boolean } | null
   completedOffers: CompletedOffer[]
+  pendingOffers: PendingOffer[]
 }
 
 interface CompletedOffer {
@@ -42,6 +43,20 @@ interface CompletedOffer {
   currency: string
   offerAmount: number | null
   summary: string
+}
+
+interface PendingOffer {
+  sentAt: string
+  sentBy: string
+  needsAction: boolean
+  cardName: string
+  imageUrl: string | null
+  setName: string | null
+  condition: string | null
+  isFoil: boolean
+  marketLocal: number | null
+  currency: string
+  offerAmount: number | null
 }
 
 interface PlayerResult extends OtherUser {
@@ -90,6 +105,16 @@ function money(amount: number | null, currency: string) {
 function tabLabel(tab: TabFilter) {
   if (tab === 'CHATBOX') return 'CHATBOX'
   return tab
+}
+
+function tabToQuery(tab: TabFilter) {
+  return tab.toLowerCase()
+}
+
+function queryToTab(tab: string | null): TabFilter {
+  if (tab === 'pending') return 'PENDING'
+  if (tab === 'done') return 'DONE'
+  return 'CHATBOX'
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -211,6 +236,65 @@ function CompletedOfferCard({ offer }: { offer: CompletedOffer }) {
   )
 }
 
+function PendingOfferCard({ offer }: { offer: PendingOffer }) {
+  return (
+    <div style={{
+      marginTop: 12,
+      border: '2px solid #0A0A0A',
+      background: '#FAF6EC',
+      boxShadow: offer.needsAction ? '3px 3px 0 #E8233B' : '3px 3px 0 #F4D03F',
+      overflow: 'hidden',
+    }}>
+      <div style={{ display: 'flex', gap: 10, padding: 10, alignItems: 'center' }}>
+        <div style={{
+          position: 'relative',
+          width: 46,
+          height: 64,
+          flexShrink: 0,
+          background: '#f0ece2',
+          border: '2px solid #0A0A0A',
+          overflow: 'hidden',
+        }}>
+          {offer.imageUrl ? (
+            <Image src={offer.imageUrl} alt={offer.cardName} fill sizes="46px" className="object-contain" unoptimized />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8B7866', fontWeight: 900 }}>TCG</div>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 13, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {offer.cardName}
+          </p>
+          {offer.setName && (
+            <p style={{ color: '#8B7866', fontSize: 10, margin: '2px 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {offer.setName}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {offer.condition && <span style={{ background: '#0A0A0A', color: '#FAF6EC', fontSize: 8, fontWeight: 900, padding: '2px 5px' }}>{offer.condition}</span>}
+            {offer.isFoil && <span style={{ background: '#F4D03F', color: '#0A0A0A', border: '1px solid #0A0A0A', fontSize: 8, fontWeight: 900, padding: '2px 5px' }}>FOIL</span>}
+            <span style={{ background: offer.needsAction ? '#E8233B' : '#F4D03F', color: offer.needsAction ? '#FAF6EC' : '#0A0A0A', border: offer.needsAction ? 'none' : '1px solid #0A0A0A', fontSize: 8, fontWeight: 900, padding: '2px 5px' }}>
+              {offer.needsAction ? 'DECISION NEEDED' : 'AWAITING REPLY'}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: offer.marketLocal != null ? '1fr 1fr' : '1fr', borderTop: '2px solid #0A0A0A' }}>
+        {offer.marketLocal != null && (
+          <div style={{ padding: '8px 10px', borderRight: '2px solid #0A0A0A' }}>
+            <p style={{ color: '#8B7866', fontSize: 9, fontWeight: 900, margin: '0 0 2px' }}>MARKET</p>
+            <p style={{ color: '#0A0A0A', fontSize: 13, fontWeight: 900, margin: 0 }}>{money(offer.marketLocal, offer.currency)}</p>
+          </div>
+        )}
+        <div style={{ padding: '8px 10px', background: offer.needsAction ? '#E8233B' : '#F4D03F' }}>
+          <p style={{ color: offer.needsAction ? 'rgba(250,246,236,0.75)' : '#8B7866', fontSize: 9, fontWeight: 900, margin: '0 0 2px' }}>OFFER</p>
+          <p style={{ color: offer.needsAction ? '#FAF6EC' : '#0A0A0A', fontSize: 13, fontWeight: 900, margin: 0 }}>{money(offer.offerAmount, offer.currency)}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Match row ────────────────────────────────────────────────────────────────
 
 function MatchItem({
@@ -219,12 +303,16 @@ function MatchItem({
   onDecline,
   acting,
   showCompletedOffers,
+  showPendingOffers,
+  sourceTab,
 }: {
   match: MatchRow
   onAccept: (id: string) => void
   onDecline: (id: string) => void
   acting: boolean
   showCompletedOffers: boolean
+  showPendingOffers: boolean
+  sourceTab: TabFilter
 }) {
   const other = match.otherUser
   const isPendingSeller = match.role === 'SELLER' && match.status === 'PENDING'
@@ -232,10 +320,11 @@ function MatchItem({
   const isUnread = match.lastMessage?.isUnread
   const isPending = match.status === 'PENDING'
   const completedOffers = match.completedOffers ?? []
+  const pendingOffers = match.pendingOffers ?? []
 
   return (
     <Link
-      href={`/matches/${match.id}`}
+      href={`/matches/${match.id}?from=${tabToQuery(sourceTab)}`}
       style={{
         display:     'block',
         background:  '#FAF6EC',
@@ -305,6 +394,17 @@ function MatchItem({
             </p>
             {completedOffers.map((offer, index) => (
               <CompletedOfferCard key={`${offer.acceptedAt}-${index}`} offer={offer} />
+            ))}
+          </div>
+        )}
+
+        {showPendingOffers && pendingOffers.length > 0 && (
+          <div>
+            <p style={{ color: '#E8233B', fontWeight: 900, fontSize: 10, letterSpacing: '0.08em', margin: '12px 0 0', textTransform: 'uppercase' }}>
+              {pendingOffers.length} pending offer{pendingOffers.length === 1 ? '' : 's'}
+            </p>
+            {pendingOffers.map((offer, index) => (
+              <PendingOfferCard key={`${offer.sentAt}-${index}`} offer={offer} />
             ))}
           </div>
         )}
@@ -412,10 +512,11 @@ function PlayerResultItem({
 
 export default function MatchesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [matches,   setMatches]   = useState<MatchRow[]>([])
   const [loading,   setLoading]   = useState(true)
   const [actingId,  setActingId]  = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<TabFilter>('CHATBOX')
+  const [activeTab, setActiveTab] = useState<TabFilter>(() => queryToTab(searchParams.get('tab')))
   const [searchOpen, setSearchOpen] = useState(false)
   const [playerQuery, setPlayerQuery] = useState('')
   const [playerResults, setPlayerResults] = useState<PlayerResult[]>([])
@@ -435,6 +536,27 @@ export default function MatchesPage() {
   }, [router])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    setActiveTab(queryToTab(searchParams.get('tab')))
+  }, [searchParams])
+
+  useEffect(() => {
+    function refreshOnReturn() {
+      load()
+    }
+
+    function refreshOnVisible() {
+      if (document.visibilityState === 'visible') load()
+    }
+
+    window.addEventListener('focus', refreshOnReturn)
+    document.addEventListener('visibilitychange', refreshOnVisible)
+    return () => {
+      window.removeEventListener('focus', refreshOnReturn)
+      document.removeEventListener('visibilitychange', refreshOnVisible)
+    }
+  }, [load])
 
   useEffect(() => {
     const q = playerQuery.trim()
@@ -473,7 +595,7 @@ export default function MatchesPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'ACTIVE' }),
     })
-    router.push(`/matches/${matchId}`)
+    router.push(`/matches/${matchId}?from=pending`)
   }
 
   async function handleDecline(matchId: string) {
@@ -500,7 +622,7 @@ export default function MatchesPage() {
       })
       const data = await res.json() as { matchId?: string | null; error?: string }
       if (res.ok && data.matchId) {
-        router.push(`/matches/${data.matchId}`)
+        router.push(`/matches/${data.matchId}?from=chatbox`)
       }
     } finally {
       setStartingPlayerId(null)
@@ -511,18 +633,31 @@ export default function MatchesPage() {
 
   const tabMatches: Record<TabFilter, MatchRow[]> = {
     CHATBOX: sorted.filter(m => m.status === 'ACTIVE'),
-    PENDING: sorted.filter(m => m.status === 'PENDING'),
+    PENDING: sorted.filter(m => m.status === 'PENDING' || (m.pendingOffers?.length ?? 0) > 0),
     DONE:    sorted.filter(m => (m.completedOffers?.length ?? 0) > 0 || m.status === 'COMPLETED'),
   }
 
   const activeBadgeCount = tabMatches.CHATBOX.filter(m => m.lastMessage?.isUnread).length
-  const pendingCount     = tabMatches.PENDING.length
+  const pendingActionCount = tabMatches.PENDING.reduce((sum, match) => {
+    const pendingMatchAction = match.status === 'PENDING' && match.role === 'SELLER' ? 1 : 0
+    const offerActions = (match.pendingOffers ?? []).filter(offer => offer.needsAction).length
+    return sum + pendingMatchAction + offerActions
+  }, 0)
+  const pendingCount = tabMatches.PENDING.reduce((sum, match) => {
+    const pendingMatchCount = match.status === 'PENDING' ? 1 : 0
+    return sum + pendingMatchCount + (match.pendingOffers?.length ?? 0)
+  }, 0)
   const doneCount        = tabMatches.DONE.reduce((sum, match) => sum + Math.max(match.completedOffers?.length ?? 0, match.status === 'COMPLETED' ? 1 : 0), 0)
 
   const visibleMatches = tabMatches[activeTab]
 
   const activeCount = sorted.filter(m => m.status === 'ACTIVE').length
   const unreadCount = sorted.filter(m => m.lastMessage?.isUnread).length
+
+  function selectTab(tab: TabFilter) {
+    setActiveTab(tab)
+    router.replace(`/matches?tab=${tabToQuery(tab)}`, { scroll: false })
+  }
 
   return (
     <main className="min-h-screen pb-28" style={{ background: '#FAF6EC' }}>
@@ -620,10 +755,14 @@ export default function MatchesPage() {
             {(['CHATBOX', 'PENDING', 'DONE'] as TabFilter[]).map((tab, i, arr) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => selectTab(tab)}
                 className="py-2 text-xs font-black uppercase tracking-wide transition-all flex items-center justify-center gap-1.5"
                 style={{
-                  background:  activeTab === tab ? '#F4D03F' : '#FAF6EC',
+                  background:  activeTab === tab
+                    ? '#F4D03F'
+                    : tab === 'PENDING' && pendingActionCount > 0
+                      ? 'rgba(232,35,59,0.08)'
+                      : '#FAF6EC',
                   color:       '#0A0A0A',
                   borderRight: i < arr.length - 1 ? '2px solid #0A0A0A' : 'none',
                 }}
@@ -641,7 +780,10 @@ export default function MatchesPage() {
                 )}
                 {tab === 'PENDING' && pendingCount > 0 && (
                   <span style={{
-                    background: '#0A0A0A', color: '#FAF6EC',
+                    background: pendingActionCount > 0 ? '#E8233B' : '#0A0A0A',
+                    color: '#FAF6EC',
+                    border: pendingActionCount > 0 ? '1px solid #0A0A0A' : 'none',
+                    boxShadow: pendingActionCount > 0 ? '1px 1px 0 #0A0A0A' : 'none',
                     fontSize: 9, fontWeight: 900,
                     padding: '1px 5px',
                     minWidth: 16, textAlign: 'center',
@@ -726,6 +868,8 @@ export default function MatchesPage() {
               onDecline={handleDecline}
               acting={actingId === match.id}
               showCompletedOffers={activeTab === 'DONE'}
+              showPendingOffers={activeTab === 'PENDING'}
+              sourceTab={activeTab}
             />
           ))
         )}

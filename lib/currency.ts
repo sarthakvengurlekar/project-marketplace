@@ -10,7 +10,8 @@ const USD_TO: Record<string, number> = {
 };
 
 export function convertFromUSD(usdAmount: number, countryCode: string): number {
-  return Math.round(usdAmount * (USD_TO[countryCode] ?? 1));
+  const converted = usdAmount * (USD_TO[countryCode] ?? 1);
+  return countryCode === 'UAE' ? Math.round(converted * 100) / 100 : Math.round(converted);
 }
 
 export function convertINRToLocal(inrAmount: number, countryCode: string): number {
