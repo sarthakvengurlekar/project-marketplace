@@ -324,6 +324,7 @@ function MatchItem({
 
   return (
     <Link
+      data-testid="match-list-item"
       href={`/matches/${match.id}?from=${tabToQuery(sourceTab)}`}
       style={{
         display:     'block',
@@ -833,6 +834,7 @@ export default function MatchesPage() {
         ) : visibleMatches.length === 0 ? (
           // Empty state
           <div
+            data-testid="matches-empty-state"
             className="rounded-xl p-10 text-center mt-4"
             style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
           >

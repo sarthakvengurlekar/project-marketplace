@@ -13,7 +13,6 @@ test.describe('profile', () => {
 
   test('shows username', async ({ page }) => {
     // Profile page always shows the logged-in user's username
-    const email = process.env.TEST_USER_EMAIL ?? ''
     // Username might be derived from email or set during onboarding — just assert something is there
     await expect(page.locator('h1, h2, h3').first()).toBeVisible({ timeout: 10000 })
   })
@@ -26,26 +25,20 @@ test.describe('profile', () => {
   })
 
   test('shows edit profile button', async ({ page }) => {
-    await expect(
-      page.getByRole('button', { name: /edit|settings/i })
-        .or(page.getByText(/edit profile|edit/i).first())
-    ).toBeVisible({ timeout: 8000 })
+    await expect(page.getByTestId('edit-profile-button')).toBeVisible({ timeout: 8000 })
   })
 
   test('edit profile modal opens', async ({ page }) => {
-    const editBtn = page.getByRole('button', { name: /edit|settings/i })
-      .or(page.getByText(/edit profile/i).first())
-    await editBtn.click()
+    await page.getByTestId('edit-profile-button').click()
 
-    // Modal should appear with some form fields
-    await expect(
-      page.locator('input, textarea').first()
-    ).toBeVisible({ timeout: 5000 })
+    await expect(page.getByTestId('edit-profile-modal')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByTestId('profile-username-input')).toBeVisible()
+    await expect(page.getByTestId('profile-bio-input')).toBeVisible()
   })
 
   test('edit profile modal can be closed', async ({ page }) => {
-    const editBtn = page.getByRole('button', { name: /edit|settings/i }).first()
-    await editBtn.click()
+    await page.getByTestId('edit-profile-button').click()
+    await expect(page.getByTestId('edit-profile-modal')).toBeVisible({ timeout: 5000 })
 
     // Close with the X button or Cancel
     await page.getByRole('button', { name: /close|cancel|✕|×/i })

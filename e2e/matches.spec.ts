@@ -42,13 +42,13 @@ test.describe('matches', () => {
 
   test('shows empty state or match list', async ({ page }) => {
     await expect(
-      page.locator('[class*="match"], [href*="/matches/"]')
-        .or(page.getByText(/no matches|no trades|no chats|start swiping/i))
+      page.getByTestId('match-list-item').first()
+        .or(page.getByTestId('matches-empty-state'))
     ).toBeVisible({ timeout: 10000 })
   })
 
   test('clicking a match navigates to match detail', async ({ page }) => {
-    const matchLink = page.locator('a[href*="/matches/"]').first()
+    const matchLink = page.getByTestId('match-list-item').first()
     const hasMatches = await matchLink.count() > 0
 
     if (hasMatches) {

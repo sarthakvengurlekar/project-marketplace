@@ -50,9 +50,8 @@ test.describe('add cards — search', () => {
 
   test('search returns results for a known card', async ({ page }) => {
     await page.getByPlaceholder(/search.*cards/i).fill('Charizard')
-    await page.getByRole('button', { name: /^search$/i }).click()
 
-    // Either results appear or a loading spinner shows then results appear
+    // Search is live/debounced, so filling the input is enough to trigger it.
     await expect(
       page.locator('[class*="grid"]').or(page.getByText(/no cards found/i))
     ).toBeVisible({ timeout: 15000 })
@@ -60,7 +59,6 @@ test.describe('add cards — search', () => {
 
   test('shows no results message for gibberish query', async ({ page }) => {
     await page.getByPlaceholder(/search.*cards/i).fill('xyzxyzxyzabc123')
-    await page.getByRole('button', { name: /^search$/i }).click()
     await expect(page.getByText(/no cards found/i)).toBeVisible({ timeout: 15000 })
   })
 
@@ -73,8 +71,11 @@ test.describe('add cards — search', () => {
     ).toBeVisible({ timeout: 15000 })
   })
 
-  test('search button is disabled when input is empty', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /^search$/i })).toBeDisabled()
+  test('clear button appears after typing and clears search', async ({ page }) => {
+    const input = page.getByPlaceholder(/search.*cards/i)
+    await input.fill('Pikachu')
+    await page.getByRole('button', { name: /clear/i }).click()
+    await expect(input).toHaveValue('')
   })
 })
 

@@ -1,9 +1,12 @@
-import { test as setup, expect } from '@playwright/test'
+import { test as setup } from '@playwright/test'
+import fs from 'fs'
 import path from 'path'
 
 const AUTH_FILE = path.join(__dirname, '.auth/user.json')
 
 setup('authenticate', async ({ page }) => {
+  fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true })
+
   const email    = process.env.TEST_USER_EMAIL
   const password = process.env.TEST_USER_PASSWORD
 
@@ -21,8 +24,17 @@ setup('authenticate', async ({ page }) => {
   await page.getByPlaceholder('••••••••').fill(password)
   await page.getByRole('button', { name: /sign in/i }).click()
 
-  // Wait for redirect away from /login — confirms auth succeeded
-  await expect(page).toHaveURL(/\/(feed|binder|profile|matches)/, { timeout: 15000 })
+  const loginError = page.getByTestId('login-error')
+
+  // Wait for redirect away from /login — confirms auth succeeded.
+  // If Supabase rejects the login, fail with the visible login message instead
+  // of timing out on the URL assertion.
+  await Promise.race([
+    page.waitForURL(/\/(feed|binder|profile|matches)/, { timeout: 20_000 }),
+    loginError.waitFor({ state: 'visible', timeout: 20_000 }).then(async () => {
+      throw new Error(`Login failed: ${await loginError.textContent()}`)
+    }),
+  ])
 
   await page.context().storageState({ path: AUTH_FILE })
 })

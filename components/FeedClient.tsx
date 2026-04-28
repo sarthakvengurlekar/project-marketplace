@@ -76,6 +76,7 @@ function SellerCard({
 
   return (
     <div
+      data-testid="seller-card"
       className="rounded-xl overflow-hidden"
       style={{
         background:  '#FAF6EC',
@@ -366,12 +367,17 @@ export default function FeedClient({
 
           {/* Country tabs */}
           <div
+            data-testid="country-filter"
             className="grid grid-cols-3 overflow-hidden"
             style={{ border: '2px solid #0A0A0A' }}
           >
             {(['IN', 'UAE', 'BOTH'] as CountryFilter[]).map((c, i, arr) => (
               <button
                 key={c}
+                type="button"
+                aria-pressed={countryFilter === c}
+                aria-label={`Show ${c === 'IN' ? 'India' : c === 'UAE' ? 'UAE' : 'both countries'} traders`}
+                data-testid={`country-filter-${c.toLowerCase()}`}
                 onClick={() => setCountryFilter(c)}
                 className="py-2 text-xs font-black uppercase tracking-wide transition-all"
                 style={{
@@ -466,6 +472,7 @@ export default function FeedClient({
       <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
         {visibleSellers.length === 0 ? (
           <div
+            data-testid="feed-empty-state"
             className="rounded-xl p-10 text-center mt-4"
             style={{ background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A' }}
           >

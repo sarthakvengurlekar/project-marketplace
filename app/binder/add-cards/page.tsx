@@ -397,6 +397,12 @@ function Toast({ message, type = 'success', onDismiss }: { message: string | nul
 const BROWSE_LIMIT = 60
 const SEARCH_LIMIT = 20
 
+function makeResultKey(term: string, setName: string | null): string {
+  const normalizedTerm = term.trim().toLowerCase()
+  if (!normalizedTerm && !setName) return 'browse'
+  return `search:${setName ?? ''}:${normalizedTerm}`
+}
+
 export default function AddCardsPage() {
   const router = useRouter()
   const { countryCode } = useCountry()
@@ -416,10 +422,12 @@ export default function AddCardsPage() {
   const [gradingCard,   setGradingCard]   = useState<PptCard | null>(null)
   const [gradingAdding, setGradingAdding] = useState(false)
   const [scanOpen,      setScanOpen]      = useState(false)
+  const [searchFocused, setSearchFocused] = useState(false)
 
   const abortRef    = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const offsetRef   = useRef(0)
+  const resultKeyRef = useRef('browse')
   const isSearch    = query.trim().length > 0 || activeSet !== null
 
   const addedCount = Object.values(addStates).filter(s => s === 'added').length
@@ -427,6 +435,27 @@ export default function AddCardsPage() {
   const displayCards = useMemo(() => {
     return isSearch ? allCards : sortCards(allCards)
   }, [allCards, isSearch])
+
+  const predictiveSuggestions = useMemo(() => {
+    const term = query.trim().toLowerCase()
+    if (term.length < 2 || activeSet) return []
+
+    const seen = new Set<string>()
+    return allCards
+      .filter(card => (card.name ?? '').toLowerCase().includes(term))
+      .map(card => ({
+        key: String(card.tcgPlayerId ?? `${card.name}-${card.cardNumber ?? card.number ?? ''}`),
+        name: card.name ?? '',
+        detail: [card.setName, card.cardNumber ?? card.number].filter(Boolean).join(' · '),
+      }))
+      .filter(suggestion => {
+        const label = suggestion.name.toLowerCase()
+        if (!label || seen.has(label)) return false
+        seen.add(label)
+        return true
+      })
+      .slice(0, 5)
+  }, [activeSet, allCards, query])
 
   // ── Init ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -461,6 +490,7 @@ export default function AddCardsPage() {
     abortRef.current?.abort()
     const ctrl = new AbortController()
     abortRef.current = ctrl
+    const requestKey = 'browse'
 
     if (offset === 0) { setLoading(true); setAllCards([]) }
     else setLoadingMore(true)
@@ -470,6 +500,7 @@ export default function AddCardsPage() {
       if (!res.ok) throw new Error('Failed to load')
       const json = await res.json()
       const cards: PptCard[] = json.cards ?? []
+      if (resultKeyRef.current !== requestKey) return
       if (offset === 0) setAllCards(cards)
       else setAllCards(prev => [...prev, ...cards])
       offsetRef.current = offset + cards.length
@@ -477,7 +508,9 @@ export default function AddCardsPage() {
     } catch (err: unknown) {
       if ((err as Error)?.name === 'AbortError') return
     } finally {
-      setLoading(false); setLoadingMore(false)
+      if (resultKeyRef.current === requestKey) {
+        setLoading(false); setLoadingMore(false)
+      }
     }
   }, [])
 
@@ -485,6 +518,8 @@ export default function AddCardsPage() {
     abortRef.current?.abort()
     const ctrl = new AbortController()
     abortRef.current = ctrl
+    const requestKey = makeResultKey(term, setName)
+    resultKeyRef.current = requestKey
 
     if (offset === 0) { setLoading(true); setAllCards([]) }
     else setLoadingMore(true)
@@ -498,6 +533,7 @@ export default function AddCardsPage() {
       if (!res.ok) throw new Error('Search failed')
       const json = await res.json()
       const cards: PptCard[] = json.cards ?? []
+      if (resultKeyRef.current !== requestKey) return
       if (offset === 0) setAllCards(cards)
       else setAllCards(prev => [...prev, ...cards])
       offsetRef.current = offset + cards.length
@@ -505,12 +541,17 @@ export default function AddCardsPage() {
     } catch (err: unknown) {
       if ((err as Error)?.name === 'AbortError') return
     } finally {
-      setLoading(false); setLoadingMore(false)
+      if (resultKeyRef.current === requestKey) {
+        setLoading(false); setLoadingMore(false)
+      }
     }
   }, [])
 
   // ── Initial browse load ─────────────────────────────────────────────────────
-  useEffect(() => { fetchBrowse(0) }, [fetchBrowse])
+  useEffect(() => {
+    resultKeyRef.current = 'browse'
+    fetchBrowse(0)
+  }, [fetchBrowse])
 
   // ── Debounced search / set change ────────────────────────────────────────────
   useEffect(() => {
@@ -635,6 +676,28 @@ export default function AddCardsPage() {
     }
   }, [activeSet, fetchBrowse, fetchSearch, isSearch, query])
 
+  function handleSearchChange(nextQuery: string) {
+    const nextSet = nextQuery.trim() ? null : activeSet
+    resultKeyRef.current = makeResultKey(nextQuery, nextSet)
+    offsetRef.current = 0
+    setAllCards([])
+    setHasMore(false)
+    setLoading(true)
+    setQuery(nextQuery)
+    if (nextQuery.trim()) setActiveSet(null)
+  }
+
+  function handleSetToggle(setName: string) {
+    const nextSet = activeSet === setName ? null : setName
+    resultKeyRef.current = makeResultKey('', nextSet)
+    offsetRef.current = 0
+    setAllCards([])
+    setHasMore(false)
+    setLoading(true)
+    setActiveSet(nextSet)
+    setQuery('')
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <main style={{ minHeight: '100vh', background: '#FAF6EC', paddingBottom: addedCount > 0 ? 96 : 48 }}>
@@ -710,8 +773,17 @@ export default function AddCardsPage() {
             <input
               type="text"
               value={query}
-              onChange={e => { setQuery(e.target.value); if (e.target.value.trim()) setActiveSet(null) }}
-              placeholder={activeSet ? `Searching in ${activeSet}…` : 'Search by name, set or number…'}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => window.setTimeout(() => setSearchFocused(false), 120)}
+              onChange={e => handleSearchChange(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && predictiveSuggestions[0]) {
+                  e.preventDefault()
+                  handleSearchChange(predictiveSuggestions[0].name)
+                  setSearchFocused(false)
+                }
+              }}
+              placeholder={activeSet ? `Searching cards in ${activeSet}…` : 'Search cards by name, set or number…'}
               style={{
                 width:           '100%',
                 boxSizing:       'border-box',
@@ -726,7 +798,15 @@ export default function AddCardsPage() {
             />
             {(query || activeSet) && (
               <button
-                onClick={() => { setQuery(''); setActiveSet(null) }}
+                onClick={() => {
+                  resultKeyRef.current = 'browse'
+                  offsetRef.current = 0
+                  setAllCards([])
+                  setHasMore(false)
+                  setLoading(true)
+                  setQuery('')
+                  setActiveSet(null)
+                }}
                 style={{
                   position:  'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
                   background: 'none', border: 'none', color: '#0A0A0A',
@@ -739,6 +819,59 @@ export default function AddCardsPage() {
               </button>
             )}
           </div>
+          {searchFocused && query.trim().length >= 2 && (
+            <div
+              style={{
+                background: '#FAF6EC',
+                border:     '2px solid #0A0A0A',
+                borderTop:  'none',
+                boxShadow:  '4px 4px 0 #0A0A0A',
+              }}
+            >
+              {predictiveSuggestions.length > 0 ? (
+                predictiveSuggestions.map(suggestion => (
+                  <button
+                    key={suggestion.key}
+                    type="button"
+                    onMouseDown={e => {
+                      e.preventDefault()
+                      handleSearchChange(suggestion.name)
+                      setSearchFocused(false)
+                    }}
+                    style={{
+                      width:          '100%',
+                      background:     '#FAF6EC',
+                      border:         'none',
+                      borderBottom:   '1px solid rgba(10,10,10,0.18)',
+                      color:          '#0A0A0A',
+                      cursor:         'pointer',
+                      padding:        '10px 12px',
+                      textAlign:      'left',
+                      display:        'flex',
+                      justifyContent: 'space-between',
+                      gap:            10,
+                    }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {suggestion.name}
+                    </span>
+                    <span style={{ fontSize: 11, color: '#8B7866', fontWeight: 700, flexShrink: 0, maxWidth: '42%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {suggestion.detail}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div style={{ padding: '10px 12px', color: '#8B7866', fontSize: 12, fontWeight: 700 }}>
+                  {loading ? 'Finding matches...' : 'No predictions yet'}
+                </div>
+              )}
+            </div>
+          )}
+          {!query.trim() && !activeSet && (
+            <p style={{ color: '#8B7866', fontSize: 12, margin: '8px 0 0', fontWeight: 700 }}>
+              Type a card name to search, or pick a set below.
+            </p>
+          )}
         </div>
 
         {/* Filter by set */}
@@ -755,7 +888,7 @@ export default function AddCardsPage() {
                 return (
                   <button
                     key={s.code || s.name}
-                    onClick={() => isActive ? setActiveSet(null) : (setActiveSet(s.name), setQuery(''))}
+                    onClick={() => handleSetToggle(s.name)}
                     style={{
                       flexShrink:  0,
                       background:  isActive ? '#F4D03F' : '#FAF6EC',

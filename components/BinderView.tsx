@@ -658,7 +658,7 @@ export default function BinderView({
       </div>
 
       {/* Owner FABs */}
-      {isOwner && !loading && (
+      {isOwner && !loading && items.length > 0 && (
         <div className="fixed bottom-20 left-0 right-0 flex justify-center gap-3 z-30 px-4">
           <Link
             href="/binder/add-cards"

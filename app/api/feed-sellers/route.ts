@@ -50,15 +50,26 @@ export async function GET() {
     return NextResponse.json({ sellers: [], currentUserId, currentUser: myProfile ?? null, defaultFilter })
   }
 
-  // Already-swiped ids
-  const { data: swipesData } = await adminSupabase
-    .from('swipes')
-    .select('target_user_id')
-    .eq('swiper_user_id', currentUserId)
-  const swipedSet = new Set((swipesData ?? []).map(r => r.target_user_id as string))
+  const [swipesRes, matchesRes] = await Promise.all([
+    adminSupabase
+      .from('swipes')
+      .select('swiped_id')
+      .eq('swiper_id', currentUserId),
+    adminSupabase
+      .from('matches')
+      .select('user_1_id, user_2_id')
+      .or(`user_1_id.eq.${currentUserId},user_2_id.eq.${currentUserId}`),
+  ])
 
-  // Unswiped seller ids
-  const unseenIds = uniqueSellerIds.filter(id => !swipedSet.has(id))
+  const excludedIds = new Set<string>([currentUserId])
+  for (const swipe of swipesRes.data ?? []) excludedIds.add(swipe.swiped_id as string)
+  for (const match of matchesRes.data ?? []) {
+    excludedIds.add(match.user_1_id as string)
+    excludedIds.add(match.user_2_id as string)
+  }
+
+  // Unseen seller ids: hide users already swiped or already in any match thread.
+  const unseenIds = uniqueSellerIds.filter(id => !excludedIds.has(id))
   if (unseenIds.length === 0) {
     return NextResponse.json({ sellers: [], currentUserId, currentUser: myProfile ?? null, defaultFilter })
   }

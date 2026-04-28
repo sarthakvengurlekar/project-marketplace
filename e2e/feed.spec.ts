@@ -23,16 +23,26 @@ test.describe('feed', () => {
   test('shows either seller cards or empty state', async ({ page }) => {
     // Feed either shows seller cards or a "no sellers" / empty state message
     await expect(
-      page.locator('[class*="card"], [class*="seller"], img[alt]')
-        .or(page.getByText(/no.*traders|no.*sellers|all caught up|come back/i))
+      page.getByTestId('seller-card').first()
+        .or(page.getByTestId('feed-empty-state'))
     ).toBeVisible({ timeout: 10000 })
   })
 
   test('shows country filter control', async ({ page }) => {
-    // The feed has country/region filter chips or buttons
-    await expect(
-      page.getByText(/india|uae|all/i).or(page.locator('button').filter({ hasText: /IN|AE/ }))
-    ).toBeVisible({ timeout: 8000 })
+    const countryFilter = page.getByTestId('country-filter')
+    await expect(countryFilter).toBeVisible({ timeout: 8000 })
+
+    await expect(page.getByTestId('country-filter-in')).toBeVisible()
+    await expect(page.getByTestId('country-filter-uae')).toBeVisible()
+    await expect(page.getByTestId('country-filter-both')).toBeVisible()
+
+    await page.getByTestId('country-filter-uae').click()
+    await expect(page.getByTestId('country-filter-uae')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('seller-card').first().or(page.getByTestId('feed-empty-state'))).toBeVisible()
+
+    await page.getByTestId('country-filter-both').click()
+    await expect(page.getByTestId('country-filter-both')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('seller-card').first().or(page.getByTestId('feed-empty-state'))).toBeVisible()
   })
 
   test('seller card shows username', async ({ page }) => {

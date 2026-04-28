@@ -754,10 +754,10 @@ function EditProfileModal({
         zIndex: 50, maxWidth: 440, margin: '0 auto',
         background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A',
         maxHeight: '85vh', display: 'flex', flexDirection: 'column',
-      }}>
+      }} data-testid="edit-profile-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '2px solid #0A0A0A', flexShrink: 0 }}>
-          <h2 style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16, margin: 0 }}>Edit Profile</h2>
+          <h2 id="edit-profile-title" style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16, margin: 0 }}>Edit Profile</h2>
           <button onClick={onClose} style={{ background: '#0A0A0A', border: 'none', color: '#FAF6EC', width: 28, height: 28, cursor: 'pointer', fontWeight: 900, fontSize: 12 }}>✕</button>
         </div>
 
@@ -809,14 +809,16 @@ function EditProfileModal({
 
           {/* Username */}
           <div>
-            <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Username</label>
-            <input value={username} onChange={e => setUsername(e.target.value)} maxLength={30} style={inputStyle} />
+            <label htmlFor="profile-username" style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Username</label>
+            <input id="profile-username" data-testid="profile-username-input" value={username} onChange={e => setUsername(e.target.value)} maxLength={30} style={inputStyle} />
           </div>
 
           {/* Bio */}
           <div>
-            <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Bio</label>
+            <label htmlFor="profile-bio" style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Bio</label>
             <textarea
+              id="profile-bio"
+              data-testid="profile-bio-input"
               value={bio} onChange={e => setBio(e.target.value)} maxLength={160} rows={3}
               placeholder="Tell traders about yourself..."
               style={{ ...inputStyle, resize: 'none' } as React.CSSProperties}
@@ -849,8 +851,8 @@ function EditProfileModal({
           {/* City */}
           {country && (
             <div>
-              <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>City</label>
-              <select value={city} onChange={e => setCity(e.target.value)} style={{ ...inputStyle, appearance: 'none' } as React.CSSProperties}>
+              <label htmlFor="profile-city" style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>City</label>
+              <select id="profile-city" data-testid="profile-city-select" value={city} onChange={e => setCity(e.target.value)} style={{ ...inputStyle, appearance: 'none' } as React.CSSProperties}>
                 <option value="">Select city…</option>
                 {(CITIES[country] ?? []).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -1200,6 +1202,7 @@ export default function ProfilePage() {
 
         {isOwner ? (
           <button
+            data-testid="edit-profile-button"
             onClick={() => setEditOpen(true)}
             style={{
               position:   'absolute',
