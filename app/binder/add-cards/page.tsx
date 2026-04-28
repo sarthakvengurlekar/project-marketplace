@@ -832,6 +832,7 @@ export default function AddCardsPage() {
                 predictiveSuggestions.map(suggestion => (
                   <button
                     key={suggestion.key}
+                    data-testid="card-search-suggestion"
                     type="button"
                     onMouseDown={e => {
                       e.preventDefault()
@@ -888,6 +889,7 @@ export default function AddCardsPage() {
                 return (
                   <button
                     key={s.code || s.name}
+                    data-testid="set-filter-chip"
                     onClick={() => handleSetToggle(s.name)}
                     style={{
                       flexShrink:  0,

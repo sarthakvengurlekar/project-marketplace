@@ -77,6 +77,50 @@ test.describe('add cards — search', () => {
     await page.getByRole('button', { name: /clear/i }).click()
     await expect(input).toHaveValue('')
   })
+
+  test('shows scan button', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /^scan$/i })).toBeVisible()
+  })
+
+  test('scan modal opens', async ({ page }) => {
+    await page.getByRole('button', { name: /^scan$/i }).click()
+    await expect(page.getByTestId('scan-card-modal')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('button', { name: /open camera/i })).toBeVisible()
+  })
+
+  test('set filters are visible', async ({ page }) => {
+    const chips = page.getByTestId('set-filter-chip')
+    if (await chips.count() === 0) {
+      test.skip()
+      return
+    }
+    await expect(chips.first()).toBeVisible()
+  })
+
+  test('set filter can be selected', async ({ page }) => {
+    const chips = page.getByTestId('set-filter-chip')
+    if (await chips.count() === 0) {
+      test.skip()
+      return
+    }
+    await chips.first().click()
+    await expect(page.getByPlaceholder(/searching cards in/i)).toBeVisible()
+  })
+
+  test('predictive suggestions appear while typing', async ({ page }) => {
+    await page.getByPlaceholder(/search.*cards/i).fill('char')
+    await expect(page.getByTestId('card-search-suggestion').first()).toBeVisible({ timeout: 20000 })
+  })
+
+  test('predictive suggestion fills search input', async ({ page }) => {
+    const input = page.getByPlaceholder(/search.*cards/i)
+    await input.fill('char')
+    const suggestion = page.getByTestId('card-search-suggestion').first()
+    await expect(suggestion).toBeVisible({ timeout: 20000 })
+    const suggestionName = (await suggestion.locator('span').first().textContent())?.trim()
+    await suggestion.click()
+    if (suggestionName) await expect(input).toHaveValue(suggestionName)
+  })
 })
 
 test.describe('card detail page', () => {
@@ -97,5 +141,22 @@ test.describe('card detail page', () => {
     } else {
       test.skip()
     }
+  })
+
+  test('shows price tabs on card detail page', async ({ page }) => {
+    await page.goto('/binder')
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
+
+    const cardLink = page.locator('a[href*="/binder/card/"]').first()
+    if (await cardLink.count() === 0) {
+      test.skip()
+      return
+    }
+
+    await cardLink.click()
+    await expect(page).toHaveURL(/\/binder\/card\//, { timeout: 8000 })
+    await expect(page.getByRole('button', { name: /^price$/i })).toBeVisible({ timeout: 8000 })
+    await expect(page.getByRole('button', { name: /^graded$/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^details$/i })).toBeVisible()
   })
 })

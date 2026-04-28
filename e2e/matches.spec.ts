@@ -58,6 +58,22 @@ test.describe('matches', () => {
       test.skip()
     }
   })
+
+  test('player search modal opens', async ({ page }) => {
+    await page.getByRole('button', { name: /search players/i }).click()
+    await expect(page.getByTestId('player-search-panel')).toBeVisible()
+    await expect(page.getByPlaceholder(/search players/i)).toBeVisible()
+  })
+
+  test('pending and done tabs show list or empty state', async ({ page }) => {
+    await page.getByTestId('matches-tab-pending').click()
+    await expect(page.getByTestId('matches-tab-pending')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('match-list-item').first().or(page.getByTestId('matches-empty-state'))).toBeVisible({ timeout: 10000 })
+
+    await page.getByTestId('matches-tab-done').click()
+    await expect(page.getByTestId('matches-tab-done')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('match-list-item').first().or(page.getByTestId('matches-empty-state'))).toBeVisible({ timeout: 10000 })
+  })
 })
 
 test.describe('match detail / chat', () => {

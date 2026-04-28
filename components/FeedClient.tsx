@@ -352,6 +352,7 @@ export default function FeedClient({
               </button>
               <Link
                 href="/profile"
+                data-testid="feed-profile-link"
                 className="w-9 h-9 flex items-center justify-center font-black text-sm overflow-hidden"
                 style={{ background: '#F4D03F', color: '#0A0A0A', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', position: 'relative' }}
                 aria-label="Profile"
@@ -421,7 +422,7 @@ export default function FeedClient({
           </div>
 
           {filtersOpen && (
-            <div style={{ border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', background: '#FAF6EC', padding: 12 }}>
+            <div data-testid="feed-filters-panel" style={{ border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', background: '#FAF6EC', padding: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <span style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 11, letterSpacing: '0.08em' }}>CARD FILTERS</span>
                 {activeFilterCount > 0 && (
@@ -442,6 +443,7 @@ export default function FeedClient({
                     return (
                       <button
                         key={r.key}
+                        data-testid={r.key === 'ALL' ? 'rarity-filter-all' : 'rarity-filter-option'}
                         onClick={() => r.key === 'ALL' ? setRarityFilters([]) : toggleRarity(r.key)}
                         style={{
                           flexShrink: 0,

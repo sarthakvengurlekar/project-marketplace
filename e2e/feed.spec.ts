@@ -57,4 +57,42 @@ test.describe('feed', () => {
       test.skip() // No sellers in test account's feed
     }
   })
+
+  test('search input filters by card name', async ({ page }) => {
+    await page.getByPlaceholder(/search by card name/i).fill('Jynx')
+    await expect(page.getByTestId('seller-card').first().or(page.getByTestId('feed-empty-state'))).toBeVisible({ timeout: 8000 })
+  })
+
+  test('filter panel opens', async ({ page }) => {
+    await page.getByRole('button', { name: /filters/i }).click()
+    await expect(page.getByTestId('feed-filters-panel')).toBeVisible()
+    await expect(page.getByText(/card filters/i)).toBeVisible()
+  })
+
+  test('rarity filter count updates', async ({ page }) => {
+    await page.getByRole('button', { name: /filters/i }).click()
+    const rarityOption = page.getByTestId('rarity-filter-option').first()
+    if (await rarityOption.count() === 0) {
+      test.skip()
+      return
+    }
+    await rarityOption.click()
+    await expect(page.getByRole('button', { name: /filtered 1/i })).toBeVisible()
+  })
+
+  test('profile shortcut navigates to profile', async ({ page }) => {
+    await page.getByTestId('feed-profile-link').click()
+    await expect(page).toHaveURL(/\/profile/, { timeout: 8000 })
+  })
+
+  test('view full collection opens seller binder', async ({ page }) => {
+    const sellerCard = page.getByTestId('seller-card').first()
+    if (await sellerCard.count() === 0) {
+      test.skip()
+      return
+    }
+
+    await page.getByRole('link', { name: /view full collection/i }).first().click()
+    await expect(page).toHaveURL(/\/binder\/[^/]+$/, { timeout: 8000 })
+  })
 })

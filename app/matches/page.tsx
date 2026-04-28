@@ -701,7 +701,7 @@ export default function MatchesPage() {
           </div>
 
           {searchOpen && (
-            <div style={{ border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', background: '#FAF6EC', overflow: 'hidden' }}>
+            <div data-testid="player-search-panel" style={{ border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', background: '#FAF6EC', overflow: 'hidden' }}>
               <div style={{ position: 'relative', borderBottom: '2px solid #0A0A0A' }}>
                 <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#8B7866', fontSize: 13 }}>🔍</span>
                 <input
@@ -756,6 +756,8 @@ export default function MatchesPage() {
             {(['CHATBOX', 'PENDING', 'DONE'] as TabFilter[]).map((tab, i, arr) => (
               <button
                 key={tab}
+                data-testid={`matches-tab-${tab.toLowerCase()}`}
+                aria-pressed={activeTab === tab}
                 onClick={() => selectTab(tab)}
                 className="py-2 text-xs font-black uppercase tracking-wide transition-all flex items-center justify-center gap-1.5"
                 style={{

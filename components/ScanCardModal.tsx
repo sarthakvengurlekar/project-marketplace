@@ -275,7 +275,7 @@ export default function ScanCardModal({
         maxWidth: 440, margin: '0 auto',
         background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '6px 6px 0 #0A0A0A',
         maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-      }}>
+      }} data-testid="scan-card-modal" role="dialog" aria-modal="true" aria-labelledby="scan-card-title">
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '2px solid #0A0A0A', flexShrink: 0 }}>
@@ -283,7 +283,7 @@ export default function ScanCardModal({
             <div style={{ width: 32, height: 32, background: '#E8233B', border: '2px solid #0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, boxShadow: '2px 2px 0 #0A0A0A' }}>
               📷
             </div>
-            <h2 style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16, margin: 0 }}>Scan Card</h2>
+            <h2 id="scan-card-title" style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16, margin: 0 }}>Scan Card</h2>
           </div>
           <button
             onClick={handleClose}

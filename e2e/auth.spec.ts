@@ -66,6 +66,26 @@ test.describe('unauthenticated', () => {
     await page.getByRole('link', { name: /sign up/i }).click()
     await expect(page).toHaveURL(/\/signup/)
   })
+
+  test('login page navigates to forgot password', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByRole('link', { name: /forgot password/i }).click()
+    await expect(page).toHaveURL(/\/forgot-password/)
+  })
+
+  test('forgot password page renders reset form', async ({ page }) => {
+    await page.goto('/forgot-password')
+    await expect(page.getByRole('heading', { name: /projecttrading/i })).toBeVisible()
+    await expect(page.getByText(/reset your password/i)).toBeVisible()
+    await expect(page.getByPlaceholder('you@example.com')).toBeVisible()
+    await expect(page.getByRole('button', { name: /send reset link/i })).toBeVisible()
+  })
+
+  test('forgot password back link returns to login', async ({ page }) => {
+    await page.goto('/forgot-password')
+    await page.getByRole('link', { name: /back to sign in/i }).click()
+    await expect(page).toHaveURL(/\/login/)
+  })
 })
 
 // ── Authenticated tests — already logged in ────────────────────────────────────
