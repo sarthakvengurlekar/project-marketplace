@@ -843,6 +843,171 @@ function EditProfileModal({
   )
 }
 
+// ─── Change Password Modal ───────────────────────────────────────────────────
+
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  async function handleChangePassword() {
+    setError(null)
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setError('Fill in all password fields.')
+      return
+    }
+    if (newPassword.length < 8) {
+      setError('New password must be at least 8 characters.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('New passwords do not match.')
+      return
+    }
+    if (newPassword === currentPassword) {
+      setError('New password must be different from the current password.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError) throw userError
+      const email = user?.email
+      if (!email) throw new Error('Password changes require an email login account.')
+
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      })
+      if (verifyError) {
+        setError('Current password is incorrect.')
+        return
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+      if (updateError) throw updateError
+
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setSuccess(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update password.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    boxSizing: 'border-box',
+    background: '#FAF6EC',
+    border: '2px solid #0A0A0A',
+    color: '#0A0A0A',
+    fontSize: 14,
+    padding: '11px 14px',
+    outline: 'none',
+  }
+
+  return (
+    <>
+      <div onClick={success ? onClose : undefined} style={{ position: 'fixed', inset: 0, background: 'rgba(10,10,10,0.65)', zIndex: 50 }} />
+      <div style={{
+        position: 'fixed', inset: '0 16px', top: '50%', transform: 'translateY(-50%)',
+        zIndex: 51, maxWidth: 440, margin: '0 auto',
+        background: '#FAF6EC', border: '2px solid #0A0A0A', boxShadow: '4px 4px 0 #0A0A0A',
+        maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '2px solid #0A0A0A', flexShrink: 0 }}>
+          <h2 style={{ color: '#0A0A0A', fontWeight: 900, fontSize: 16, margin: 0 }}>Change Password</h2>
+          <button onClick={onClose} style={{ background: '#0A0A0A', border: 'none', color: '#FAF6EC', width: 28, height: 28, cursor: 'pointer', fontWeight: 900, fontSize: 12 }}>X</button>
+        </div>
+
+        {success ? (
+          <div style={{ padding: 20, textAlign: 'center' }}>
+            <div style={{ width: 56, height: 56, margin: '0 auto 14px', background: '#F4D03F', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 22 }}>
+              OK
+            </div>
+            <p style={{ color: '#0A0A0A', fontSize: 17, fontWeight: 900, margin: '0 0 6px' }}>Password updated</p>
+            <p style={{ color: '#8B7866', fontSize: 13, margin: '0 0 18px' }}>Your new password is active for future sign-ins.</p>
+            <button
+              onClick={onClose}
+              style={{ width: '100%', padding: '12px 0', background: '#E8233B', border: '2px solid #0A0A0A', boxShadow: '3px 3px 0 #0A0A0A', color: '#FAF6EC', fontWeight: 900, fontSize: 14, cursor: 'pointer' }}
+            >
+              Done
+            </button>
+          </div>
+        ) : (
+          <>
+            <div style={{ overflowY: 'auto', flex: 1, padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <p style={{ color: '#8B7866', fontSize: 12, lineHeight: 1.45, margin: 0 }}>
+                For security, confirm your current password before setting a new one.
+              </p>
+
+              <div>
+                <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Current Password</label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  autoComplete="current-password"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', color: '#8B7866', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  style={inputStyle}
+                />
+              </div>
+
+              {error && (
+                <p style={{ color: '#E8233B', fontSize: 13, fontWeight: 700, padding: '8px 12px', border: '1.5px solid #E8233B', background: 'rgba(232,35,59,0.06)', margin: 0 }}>{error}</p>
+              )}
+            </div>
+
+            <div style={{ padding: '12px 16px', borderTop: '2px solid #0A0A0A', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                onClick={handleChangePassword}
+                disabled={saving}
+                style={{ width: '100%', padding: '12px 0', background: '#E8233B', border: '2px solid #0A0A0A', boxShadow: saving ? 'none' : '3px 3px 0 #0A0A0A', color: '#FAF6EC', fontWeight: 900, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}
+              >
+                {saving ? 'Updating...' : 'Update Password'}
+              </button>
+              <button onClick={onClose} disabled={saving} style={{ width: '100%', padding: '10px 0', background: 'none', border: '2px solid #0A0A0A', color: '#0A0A0A', fontWeight: 800, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function ProfileSkeleton() {
@@ -872,6 +1037,7 @@ export default function ProfilePage() {
   const [loading,      setLoading]      = useState(true)
   const [editOpen,     setEditOpen]     = useState(false)
   const [isOwner,      setIsOwner]      = useState(true)
+  const [passwordOpen, setPasswordOpen] = useState(false)
   const [badgeUnlock,  setBadgeUnlock]  = useState<BadgeUnlock | null>(null)
 
   const loadProfile = useCallback(async (showLoading = false) => {
@@ -1187,6 +1353,28 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          {/* ── Account security ─────────────────────────────────────────────── */}
+          <div style={{ padding: '0 16px 16px' }}>
+            <button
+              onClick={() => setPasswordOpen(true)}
+              style={{
+                width:      '100%',
+                padding:    '14px 0',
+                background: '#F4D03F',
+                border:     '2px solid #0A0A0A',
+                boxShadow:  '3px 3px 0 #0A0A0A',
+                color:      '#0A0A0A',
+                fontWeight: 900,
+                fontSize:   13,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                cursor:     'pointer',
+              }}
+            >
+              Change Password
+            </button>
+          </div>
+
           {/* ── Sign out ─────────────────────────────────────────────────────── */}
           <div style={{ padding: '0 16px' }}>
             <button
@@ -1218,6 +1406,10 @@ export default function ProfilePage() {
           onClose={() => setEditOpen(false)}
           onSaved={handleSaved}
         />
+      )}
+
+      {isOwner && passwordOpen && (
+        <ChangePasswordModal onClose={() => setPasswordOpen(false)} />
       )}
 
       {isOwner && badgeUnlock && (
